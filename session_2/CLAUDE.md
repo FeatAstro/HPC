@@ -2,7 +2,7 @@
 
 Source of the physics: `session_2.pdf` (professor's slides, "HPC Master Class").
 This is a 2D hybrid-kinetic PIC code: ions are kinetic macro-particles (Boris-pushed),
-electrons are a fluid; the mesh carries deposited moments and (eventually) fields.
+electrons are a fluid; the mesh carries deposited moments and the Yee-staggered fields.
 
 ## Build & test
 
@@ -10,55 +10,68 @@ electrons are a fluid; the mesh carries deposited moments and (eventually) field
 cmake -S . -B build
 cmake --build build
 ctest --test-dir build --output-on-failure
-./build/kinetic_fisher   # demo driver, prints Step 1 & Step 2 diagnostics
+./build/kinetic_fisher   # demo driver: Boris, deposit/gather, hybrid waves
 ```
 
 ## Conventions
 
-- **2D3V**: particle positions are 2D `(x, y)`; velocities and fields are full
-  3-component `Vec3`, since `v × B` needs all three components even though the
-  space grid is 2D.
-- **Shape function**: first-order = bilinear. `interpolation.cpp` implements
-  both deposit (particle → grid moments `n_ij`, `v_ij`) and gather (grid → particle
-  field) through the same `bilinear_weights()` function — this symmetry is required
-  to avoid a self-force artifact (see slide 6).
+- **2D3V, periodic**: particle positions are 2D `(x, y)`; velocities and fields are full
+  3-component `Vec3` (`v × B` needs all three). The domain is periodic: `Grid2D::index()` wraps
+  indices and `wrap_x/wrap_y` wrap positions, so `nx`, `ny` count nodes = cells and the domain
+  length is `nx * dx`.
+- **Normalised units**: defaults of `PlasmaParameters` are `mu0 = e = m_i = n0 = 1`, `B` in `B0`,
+  velocity in `v_A`, time in `1/Omega_i`. Settings live in structs (`PlasmaParameters`, `IonLoading`,
+  `WaveRunSettings`); change a value there, not in the algorithms.
+- **Naming**: variables are spelled out (`ion_density`, `electric_field`, `magnetic_field`,
+  `current_density`), comments only where the code cannot say it (physics, sign, layout).
+- **Shape function**: first-order = bilinear. `interpolation.cpp` implements deposit and gather
+  through the same `bilinear_weights()`, which takes the staggering offset of the quantity —
+  this symmetry is required to avoid a self-force artifact (slide 6).
 - **Weights**: following the slides, `w_p` is already a density contribution, so
   `deposit_moments` computes `n_ij = Σ S·w_p` with *no* division by `dx·dy`; `Σ n_ij = Σ w_p`
-  for any spacing. `v_ij` is the weighted mean (divided by the summed weight).
-- **Grid indexing**: node `(i, j)` is stored at `j * nx + i` (row-major); `nx`, `ny` count
-  nodes, not cells. Always go through `Grid2D::index()`.
-- **Toolchain choices**: C++20 (`std::numbers::pi`), assert-based test executables run by
-  `ctest` (no test framework), own minimal `Vec3` (Eigen is not installed; kept custom on
-  purpose), HDF5 is linked in CMake but unused here.
-- **Boris pusher** (`boris_pusher.cpp`) implements the exact update from slide 7:
-  half `E` accel → exact `B` rotation (`t`, `v'`, `s` trick) → half `E` accel.
-  It only rotates/accelerates velocity; callers (`step1_single_particle.cpp`,
-  `step2_pic_loop.cpp`) own the `r^{n+1/2}` / `r^{n+1}` position half-steps, since
-  they also decide where `E`,`B` are sampled from.
+  for any spacing. `v_ij` is the weighted mean. Uniform loading uses `w_p = n0 / particles_per_cell`.
+  A macro-particle stands for `w_p·dx·dy` real ions (used for energies).
+- **Yee layout** (`yee_layout.hpp`, the single place that defines it): `Ex (i+½,j)`, `Ey (i,j+½)`,
+  `Ez (i,j)`; `Bx (i,j+½)`, `By (i+½,j)`, `Bz (i+½,j+½)`; `j` like `E`; ion moments on the nodes.
+  Curls use forward differences (E → B) and backward differences (B → E/j), see
+  `finite_differences.hpp` and `field_solver.cpp`.
+- **Hybrid model**: ions are kinetic (Boris-pushed); electrons are a massless, quasi-neutral,
+  isothermal fluid that is never stored: `v_e = v_i − j/(ne)`, `E = −v_e×B − ∇P_e/(ne)`,
+  `mu0 j = ∇×B`. Ohm's law is evaluated at each E-component location by interpolating `n`,
+  `v_i`, `j`, `B` there. The closure is one function (`electron_pressure` in `field_solver.cpp`);
+  electron inertia is dropped.
+- **Time stepping** (`pic_loop.cpp`): drift half step, then a predictor (moments with `v^n`,
+  push a copy to estimate `v^{n+1}`), then a corrector (moments with `(v^n+v^{n+1})/2`, fields,
+  final Boris push, drift half step). `B` is advanced with RK4 and frozen moments; `E` is computed
+  from the half-step `B`. RK4 is used because a midpoint scheme is weakly unstable for whistlers.
+- **Toolchain**: C++20, assert-style test executables run by `ctest` (helpers in `tests/check.hpp`),
+  own minimal `Vec3` (Eigen not installed), HDF5 linked in CMake but unused.
+- **Boris pusher** (`boris_pusher.cpp`): slide 7 velocity update only; `particle_push.cpp` owns the
+  drift half-steps and the E/B gather.
 
-## Scope: what's implemented vs. deferred
+## Scope: what is implemented
 
-Implemented:
-- Step 1: single particle, Boris pusher, prescribed analytic `E`,`B` fields.
-- Step 2: N particles, bilinear deposit of moments onto a node-centered grid,
-  bilinear gather of (prescribed/static) fields back to particles.
+- Step 1: single particle, Boris pusher, prescribed analytic fields.
+- Step 2: N particles, bilinear deposit and gather.
+- Periodic boundaries, Yee-staggered fields, Ampère + generalized Ohm's law + Faraday (RK4),
+  the full predictor-corrector PIC loop (`advance_hybrid_step`).
+- Validation: uniform-drift equilibrium, parallel ion-cyclotron / whistler waves against the exact
+  dispersion relation (`linear_wave.cpp`, ~1% frequency error, energy conserved to ~1e-5).
 
-**Not implemented yet** (deferred to a later project stage): the self-consistent
-field solve — Faraday's law for `B`, Ampere's law for `j`, and the generalized
-Ohm's law for `E` (slide 1) — and the Yee-staggered grid layout that solve would
-need. Right now `Grid2D` is node-centered (not staggered) and `grid.E`/`grid.B`
-are just set directly by the caller; nothing evolves them.
+Known behaviour: a warm, randomly loaded plasma shows particle noise (transverse field grows to a
+level that scales as `1/sqrt(particles per cell)`, total energy drifts up accordingly); `div B` stays
+at 1e-14. With `electron_temperature > 0` total ion + magnetic energy is not conserved (the isothermal
+electrons exchange energy with a heat bath).
 
 ## To do
 
-- Self-consistent field solve on a Yee-staggered grid: Faraday, Ampere, generalized Ohm's
-  law, then the full PIC loop of slide 6 (moments → fields → gather → push). `Grid2D` is
-  not staggered yet.
-- Boundary conditions: particles outside the grid are currently clamped to the edge cell
-  and extrapolated (weights can be negative) instead of being wrapped or reflected.
-- More Step 2 test cases with known analytic answers once the field solve exists.
-- Minor: `main.cpp` uses `std::numbers::pi` without `#include <numbers>` (compiles through
-  a transitive include; add it explicitly).
+- Boundary conditions other than periodic (reflecting/open) if a problem needs them.
+- Higher-order shape functions (slide 5 mentions B-splines) and noise reduction (`delta-f`, filtering).
+- More validation: oblique/compressive waves (magnetosonic), Landau-type damping, ion beam instabilities.
+- Performance: the Ohm's-law evaluation re-computes bilinear weights per component; OpenMP over
+  particles needs a safe deposit (per-thread grids or colouring); HDF5 output.
+- Update `cpp_concepts.tex` for the periodic grid, Yee layout, field solver and PIC loop (it still
+  describes the old node-centred `Grid2D` field names).
 
 ## Documentation
 
@@ -68,13 +81,21 @@ conventions change. The repo root `README.md` describes both sessions.
 
 ## Layout
 
-- `src/vec3.hpp` — minimal 3-vector.
+- `src/vec3.hpp` — 3-vector, `axis::x/y/z` component indices.
 - `src/particle.hpp` — `Particle` (x, y, v, q, m, w).
+- `src/vector_field.hpp` — `ScalarField`/`VectorField` and small arithmetic helpers.
+- `src/yee_layout.hpp` — where each component lives (`yee::electric_field`, ...).
+- `src/grid.hpp` — periodic `Grid2D` with the moments and fields.
+- `src/finite_differences.hpp` — forward/backward differences on nodes.
+- `src/interpolation.{hpp,cpp}` — `bilinear_weights`, `deposit_moments`, `gather`, `gather_scalar`.
 - `src/boris_pusher.{hpp,cpp}` — velocity update only.
-- `src/step1_single_particle.{hpp,cpp}` — leapfrog wrapper for prescribed-field particle.
-- `src/grid.hpp` — `Grid2D`.
-- `src/interpolation.{hpp,cpp}` — `bilinear_weights`, `deposit_moments`, `gather`.
-- `src/step2_pic_loop.{hpp,cpp}` — leapfrog wrapper using grid-gathered fields.
-- `tests/test_boris_pusher.cpp` — Step 1 checks (energy conservation, gyroradius, period).
-- `tests/test_deposit_gather.cpp` — Step 2 checks (weight conservation, linear-field
-  exactness, consistency with Step 1).
+- `src/particle_push.{hpp,cpp}` — `drift_particles`, `accelerate_particles`.
+- `src/step1_single_particle.{hpp,cpp}`, `src/step2_pic_loop.{hpp,cpp}` — prescribed-field leapfrog wrappers.
+- `src/plasma_parameters.hpp` — physical constants and plasma properties.
+- `src/field_solver.{hpp,cpp}` — curls, Ampère, Ohm's law, Faraday (RK4).
+- `src/pic_loop.{hpp,cpp}` — `advance_hybrid_step`.
+- `src/particle_loading.{hpp,cpp}` — uniform lattice loading of ions.
+- `src/diagnostics.{hpp,cpp}` — energies, `max |div B|`.
+- `src/linear_wave.{hpp,cpp}` — parallel-wave dispersion relation and run driver.
+- `tests/` — `test_boris_pusher`, `test_deposit_gather`, `test_periodic_grid`, `test_yee_grid`,
+  `test_field_solver`, `test_hybrid_waves`.

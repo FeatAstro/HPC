@@ -23,28 +23,33 @@ cd build && ./finite_difference_convergence    # writes results.h5 in the curren
 
 Then open `analysis.ipynb` (it reads `build/results.h5`).
 
-## session_2 — Boris pusher and particle–mesh coupling
+## session_2 — Hybrid-kinetic particle-in-cell
 
-Building blocks of a 2D hybrid-kinetic particle-in-cell code (ions as macro-particles, electrons as a
-fluid), following the course slides in `session_2/session_2.pdf`:
+A 2D hybrid-kinetic particle-in-cell code (ions as macro-particles, electrons as a massless fluid),
+following the course slides in `session_2/session_2.pdf`. The domain is periodic, in normalised units
+(`mu0 = e = m_i = n0 = B0 = 1`); every physical and numerical setting is a field of one parameter struct
+(`PlasmaParameters`, `IonLoading`, `WaveRunSettings`).
 
-1. **Boris pusher, one particle**: a charged particle advanced in prescribed electric and magnetic
-   fields, tested against the exact gyration in a uniform magnetic field (speed conservation, Larmor
-   radius, return to start after one period).
-2. **N particles and the mesh**: particles deposit weight and bulk velocity on a 2D grid with a
-   first-order (bilinear) shape function, and grid fields are gathered back to the particles with the
-   same shape function. Tested for weight conservation (any grid spacing), exactness on linear fields,
-   and consistency with step 1.
-
-Not implemented yet: the self-consistent field solve (Faraday, Ampère, generalized Ohm's law) and the
-Yee-staggered grid. Fields on the grid are prescribed.
+1. **Boris pusher, one particle**: tested against the exact gyration in a uniform magnetic field.
+2. **N particles and the mesh**: bilinear deposit of density and bulk velocity, bilinear gather of the
+   fields, same shape function both ways; weight conservation for any grid spacing.
+3. **Periodic boundaries and a Yee grid**: `E` and `j` on cell edges, `B` on cell faces, each component
+   interpolated from where it lives.
+4. **Field solver**: Ampère's law (no displacement current), generalized Ohm's law with the electron
+   fluid velocity `v_e = v_i - j/(ne)` and an isothermal electron pressure, Faraday's law advanced with
+   RK4. `div B` stays at round-off.
+5. **Full PIC loop** (predictor-corrector): moments, fields, gather, push.
+6. **Validation**: a uniform drift stays in equilibrium, and parallel ion-cyclotron and whistler waves
+   propagate at the frequency of the exact dispersion relation (about 1% agreement, energy conserved to
+   1e-5 of the wave energy).
 
 ```sh
 cd session_2
 cmake -S . -B build && cmake --build build
 ctest --test-dir build --output-on-failure     # run the tests
-./build/kinetic_fisher                         # demo of both steps
+./build/kinetic_fisher                         # demo of the steps above
 ```
 
-`session_2/cpp_concepts.tex` explains the physics and the C++ used (build with
-`latexmk -pdf cpp_concepts.tex`); `session_2/CLAUDE.md` summarizes the conventions.
+`session_2/cpp_concepts.tex` explains the physics and the C++ of steps 1-2 (it has not been updated for
+steps 3-6 yet; build with `latexmk -pdf cpp_concepts.tex`); `session_2/CLAUDE.md` summarizes the
+conventions.

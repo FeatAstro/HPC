@@ -2,10 +2,20 @@
 
 #include <cmath>
 
+namespace axis {
+inline constexpr int x = 0;
+inline constexpr int y = 1;
+inline constexpr int z = 2;
+inline constexpr int count = 3;
+} // namespace axis
+
 struct Vec3 {
     double x = 0.0;
     double y = 0.0;
     double z = 0.0;
+
+    double& operator[](int component) { return component == axis::x ? x : component == axis::y ? y : z; }
+    double operator[](int component) const { return component == axis::x ? x : component == axis::y ? y : z; }
 };
 
 inline Vec3 operator+(const Vec3& a, const Vec3& b) {

@@ -4,7 +4,6 @@
 //  3. consistency with Step 1: N=1 particle, uniform prescribed field -> same
 //     trajectory as the Step 1 Boris pusher test.
 #include <cmath>
-#include <cstdlib>
 #include <iostream>
 #include <random>
 #include <vector>
@@ -15,15 +14,10 @@
 #include "step1_single_particle.hpp"
 #include "step2_pic_loop.hpp"
 #include "vec3.hpp"
+#include "check.hpp"
+#include "particle_push.hpp"
 
 namespace {
-
-void check_close(double a, double b, double tol, const char* what) {
-    if (std::fabs(a - b) > tol) {
-        std::cerr << "FAIL: " << what << " expected " << b << " got " << a << " (tol " << tol << ")\n";
-        std::exit(1);
-    }
-}
 
 void test_weight_conservation() {
     Grid2D grid(11, 11, 1.0, 1.0, 0.0, 0.0);
@@ -47,7 +41,7 @@ void test_weight_conservation() {
     deposit_moments(grid, particles);
 
     double deposited_weight = 0.0;
-    for (double n_ij : grid.n) {
+    for (double n_ij : grid.ion_density) {
         deposited_weight += n_ij;
     }
 
@@ -73,7 +67,7 @@ void test_nonunit_spacing() {
     }
     deposit_moments(grid, particles);
     double deposited_weight = 0.0;
-    for (double n_ij : grid.n) {
+    for (double n_ij : grid.ion_density) {
         deposited_weight += n_ij;
     }
     check_close(deposited_weight, total_weight, 1e-9, "weight conservation, dx!=1");
@@ -84,8 +78,8 @@ void test_nonunit_spacing() {
     Particle b{1.0, 8.0, Vec3{5.0, 0.0, 0.0}, 1.0, 1.0, 3.0};
     deposit_moments(grid, {a, b});
     const int k = grid.index(2, 2);
-    check_close(grid.n[k], 1.0 + 3.0, 1e-12, "n = summed weight, independent of spacing");
-    check_close(grid.v[k].x, (1.0 * 1.0 + 3.0 * 5.0) / 4.0, 1e-12, "weighted mean velocity");
+    check_close(grid.ion_density[k], 1.0 + 3.0, 1e-12, "n = summed weight, independent of spacing");
+    check_close(grid.ion_velocity[k].x, (1.0 * 1.0 + 3.0 * 5.0) / 4.0, 1e-12, "weighted mean velocity");
 
     std::cout << "test_nonunit_spacing: passed\n";
 }
@@ -97,7 +91,7 @@ void test_linear_field_exactness() {
     for (int j = 0; j < grid.ny; ++j) {
         for (int i = 0; i < grid.nx; ++i) {
             const double val = a + b * grid.node_x(i) + c * grid.node_y(j);
-            grid.E[grid.index(i, j)] = Vec3{val, 0.0, 0.0};
+            grid.electric_field[grid.index(i, j)] = Vec3{val, 0.0, 0.0};
         }
     }
 
@@ -106,7 +100,7 @@ void test_linear_field_exactness() {
     for (int trial = 0; trial < 200; ++trial) {
         const double x = pos_dist(rng);
         const double y = pos_dist(rng);
-        const Vec3 gathered = gather(grid.E, grid, x, y);
+        const Vec3 gathered = gather(grid.electric_field, yee::nodes, grid, x, y);
         const double expected = a + b * x + c * y;
         check_close(gathered.x, expected, 1e-9, "linear field exactness");
     }
@@ -127,8 +121,8 @@ void test_consistency_with_step1() {
 
     Grid2D grid(11, 11, 1.0, 1.0, 0.0, 0.0);
     for (int k = 0; k < grid.nx * grid.ny; ++k) {
-        grid.E[k] = Vec3{0.0, 0.0, 0.0};
-        grid.B[k] = Vec3{0.0, 0.0, B0};
+        grid.electric_field[k] = Vec3{0.0, 0.0, 0.0};
+        grid.magnetic_field[k] = Vec3{0.0, 0.0, B0};
     }
 
     std::vector<Particle> particles(1, p_step1);

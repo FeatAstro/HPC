@@ -3,14 +3,14 @@
 #include <algorithm>
 #include <cmath>
 
-CellWeights bilinear_weights(const Grid2D& g, double x, double y) {
-    int i0 = static_cast<int>(std::floor((x - g.x0) / g.dx));
-    int j0 = static_cast<int>(std::floor((y - g.y0) / g.dy));
-    i0 = std::clamp(i0, 0, g.nx - 2);
-    j0 = std::clamp(j0, 0, g.ny - 2);
+CellWeights bilinear_weights(const Grid2D& g, double x, double y, CellOffset offset) {
+    const double cell_coordinate_x = (x - g.x0) / g.dx - offset.x;
+    const double cell_coordinate_y = (y - g.y0) / g.dy - offset.y;
 
-    const double fx = (x - g.node_x(i0)) / g.dx;
-    const double fy = (y - g.node_y(j0)) / g.dy;
+    const int i0 = static_cast<int>(std::floor(cell_coordinate_x));
+    const int j0 = static_cast<int>(std::floor(cell_coordinate_y));
+    const double fx = cell_coordinate_x - i0;
+    const double fy = cell_coordinate_y - j0;
 
     CellWeights cw;
     cw.i0 = i0;
@@ -23,42 +23,36 @@ CellWeights bilinear_weights(const Grid2D& g, double x, double y) {
 }
 
 void deposit_moments(Grid2D& g, const std::vector<Particle>& particles) {
-    std::fill(g.n.begin(), g.n.end(), 0.0);
-    std::fill(g.v.begin(), g.v.end(), Vec3{});
+    std::fill(g.ion_density.begin(), g.ion_density.end(), 0.0);
+    std::fill(g.ion_velocity.begin(), g.ion_velocity.end(), Vec3{});
 
     for (const Particle& p : particles) {
         const CellWeights cw = bilinear_weights(g, p.x, p.y);
-        const int idx00 = g.index(cw.i0, cw.j0);
-        const int idx10 = g.index(cw.i0 + 1, cw.j0);
-        const int idx01 = g.index(cw.i0, cw.j0 + 1);
-        const int idx11 = g.index(cw.i0 + 1, cw.j0 + 1);
-
-        g.n[idx00] += cw.w00 * p.w;
-        g.n[idx10] += cw.w10 * p.w;
-        g.n[idx01] += cw.w01 * p.w;
-        g.n[idx11] += cw.w11 * p.w;
-
-        g.v[idx00] += (cw.w00 * p.w) * p.v;
-        g.v[idx10] += (cw.w10 * p.w) * p.v;
-        g.v[idx01] += (cw.w01 * p.w) * p.v;
-        g.v[idx11] += (cw.w11 * p.w) * p.v;
+        for_each_corner(g, cw, [&](int node, double weight) {
+            g.ion_density[node] += weight * p.w;
+            g.ion_velocity[node] += (weight * p.w) * p.v;
+        });
     }
 
-    // g.v holds the summed weight*velocity; dividing by the summed weight
-    // g.n gives the weighted mean (bulk) velocity.
-    for (std::size_t k = 0; k < g.v.size(); ++k) {
-        if (g.n[k] > 0.0) {
-            g.v[k] = (1.0 / g.n[k]) * g.v[k];
+    // ion_velocity holds the summed weight*velocity; dividing by the summed weight
+    // ion_density gives the weighted mean (bulk) velocity.
+    for (std::size_t node = 0; node < g.ion_velocity.size(); ++node) {
+        if (g.ion_density[node] > 0.0) {
+            g.ion_velocity[node] = (1.0 / g.ion_density[node]) * g.ion_velocity[node];
         }
     }
 }
 
-Vec3 gather(const std::vector<Vec3>& field, const Grid2D& g, double x, double y) {
-    const CellWeights cw = bilinear_weights(g, x, y);
+Vec3 gather(const VectorField& field, const Staggering& staggering, const Grid2D& g, double x, double y) {
     Vec3 result;
-    result += cw.w00 * field[g.index(cw.i0, cw.j0)];
-    result += cw.w10 * field[g.index(cw.i0 + 1, cw.j0)];
-    result += cw.w01 * field[g.index(cw.i0, cw.j0 + 1)];
-    result += cw.w11 * field[g.index(cw.i0 + 1, cw.j0 + 1)];
+    for (int component = 0; component < axis::count; ++component) {
+        const CellWeights cw = bilinear_weights(g, x, y, staggering[component]);
+        result[component] = weighted_sum(g, cw, [&](int node) { return field[node][component]; });
+    }
     return result;
+}
+
+double gather_scalar(const ScalarField& field, const Grid2D& g, double x, double y) {
+    const CellWeights cw = bilinear_weights(g, x, y);
+    return weighted_sum(g, cw, [&](int node) { return field[node]; });
 }
