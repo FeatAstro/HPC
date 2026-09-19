@@ -50,6 +50,5 @@ ctest --test-dir build --output-on-failure     # run the tests
 ./build/kinetic_fisher                         # demo of the steps above
 ```
 
-`session_2/cpp_concepts.tex` explains the physics and the C++ of steps 1-2 (it has not been updated for
-steps 3-6 yet; build with `latexmk -pdf cpp_concepts.tex`); `session_2/CLAUDE.md` summarizes the
-conventions.
+`session_2/cpp_concepts.tex` (PDF included) explains the physics and the C++ of all the steps above
+(build with `latexmk -pdf cpp_concepts.tex`); `session_2/CLAUDE.md` summarizes the conventions.

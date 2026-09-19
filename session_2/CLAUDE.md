@@ -70,8 +70,6 @@ electrons exchange energy with a heat bath).
 - More validation: oblique/compressive waves (magnetosonic), Landau-type damping, ion beam instabilities.
 - Performance: the Ohm's-law evaluation re-computes bilinear weights per component; OpenMP over
   particles needs a safe deposit (per-thread grids or colouring); HDF5 output.
-- Update `cpp_concepts.tex` for the periodic grid, Yee layout, field solver and PIC loop (it still
-  describes the old node-centred `Grid2D` field names).
 
 ## Documentation
 
