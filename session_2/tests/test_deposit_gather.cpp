@@ -48,7 +48,7 @@ void test_weight_conservation() {
 
     double deposited_weight = 0.0;
     for (double n_ij : grid.n) {
-        deposited_weight += n_ij * grid.dx * grid.dy;
+        deposited_weight += n_ij;
     }
 
     check_close(deposited_weight, total_weight, 1e-9, "weight conservation");
@@ -56,7 +56,7 @@ void test_weight_conservation() {
 }
 
 void test_nonunit_spacing() {
-    // dx = 0.5, dy = 4.0: domain x in [0,5], y in [0,20]; cell area = 2.0
+    // dx = 0.5, dy = 4.0: domain x in [0,5], y in [0,20]
     Grid2D grid(11, 6, 0.5, 4.0, 0.0, 0.0);
 
     // (a) weight conservation with non-unit spacing
@@ -74,17 +74,17 @@ void test_nonunit_spacing() {
     deposit_moments(grid, particles);
     double deposited_weight = 0.0;
     for (double n_ij : grid.n) {
-        deposited_weight += n_ij * grid.dx * grid.dy;
+        deposited_weight += n_ij;
     }
     check_close(deposited_weight, total_weight, 1e-9, "weight conservation, dx!=1");
 
-    // (b) exact density value and bulk velocity at a node
+    // (b) exact node value and bulk velocity at a node
     // two particles sitting exactly on node (2,2) = (1.0, 8.0), weights 1 and 3
     Particle a{1.0, 8.0, Vec3{1.0, 0.0, 0.0}, 1.0, 1.0, 1.0};
     Particle b{1.0, 8.0, Vec3{5.0, 0.0, 0.0}, 1.0, 1.0, 3.0};
     deposit_moments(grid, {a, b});
     const int k = grid.index(2, 2);
-    check_close(grid.n[k], (1.0 + 3.0) / (0.5 * 4.0), 1e-12, "density = weight / cell area");
+    check_close(grid.n[k], 1.0 + 3.0, 1e-12, "n = summed weight, independent of spacing");
     check_close(grid.v[k].x, (1.0 * 1.0 + 3.0 * 5.0) / 4.0, 1e-12, "weighted mean velocity");
 
     std::cout << "test_nonunit_spacing: passed\n";

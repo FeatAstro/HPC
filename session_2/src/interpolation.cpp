@@ -44,15 +44,12 @@ void deposit_moments(Grid2D& g, const std::vector<Particle>& particles) {
         g.v[idx11] += (cw.w11 * p.w) * p.v;
     }
 
-    // At this point g.n holds the summed weight per node and g.v the summed
-    // weight*velocity. The bulk velocity divides by the summed weight; only
-    // afterwards is g.n converted to a density (weight per unit area).
-    const double inv_cell_area = 1.0 / (g.dx * g.dy);
+    // g.v holds the summed weight*velocity; dividing by the summed weight
+    // g.n gives the weighted mean (bulk) velocity.
     for (std::size_t k = 0; k < g.v.size(); ++k) {
         if (g.n[k] > 0.0) {
             g.v[k] = (1.0 / g.n[k]) * g.v[k];
         }
-        g.n[k] *= inv_cell_area;
     }
 }
 

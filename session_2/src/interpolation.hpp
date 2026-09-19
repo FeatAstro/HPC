@@ -17,8 +17,9 @@ struct CellWeights {
 CellWeights bilinear_weights(const Grid2D& g, double x, double y);
 
 // Deposit: accumulate particle weight/velocity onto the grid moments n_ij, v_ij
-// (slide 4/5: n_ij = sum_p S(r_p - r_ij) w_p). n_ij is returned as a density,
-// i.e. divided by the cell area dx*dy, so sum(n_ij)*dx*dy equals the total weight.
+// (slide 4/5: n_ij = sum_p S(r_p - r_ij) w_p). Following the slides, w_p is
+// already a density contribution, so no division by the cell area is done here
+// and sum(n_ij) equals sum(w_p) for any grid spacing.
 void deposit_moments(Grid2D& g, const std::vector<Particle>& particles);
 
 // Gather: interpolate a node-centered field back to a particle position, using

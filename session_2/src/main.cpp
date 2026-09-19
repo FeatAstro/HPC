@@ -73,7 +73,7 @@ void run_step2_demo() {
     deposit_moments(grid, particles);
     double deposited_weight = 0.0;
     for (double n_ij : grid.n) {
-        deposited_weight += n_ij * grid.dx * grid.dy;
+        deposited_weight += n_ij;
     }
 
     std::cout << std::fixed << std::setprecision(6);
