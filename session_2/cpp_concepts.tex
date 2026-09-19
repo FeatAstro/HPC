@@ -1,0 +1,657 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage[colorlinks=true,linkcolor=blue!50!black,bookmarks=false]{hyperref}
+
+\definecolor{codebg}{gray}{0.95}
+\definecolor{cmt}{rgb}{0.25,0.5,0.25}
+\definecolor{kw}{rgb}{0.1,0.1,0.6}
+
+\lstset{
+  language=C++,
+  basicstyle=\ttfamily\small,
+  keywordstyle=\color{kw},
+  commentstyle=\color{cmt}\itshape,
+  backgroundcolor=\color{codebg},
+  frame=single,
+  rulecolor=\color{gray!40},
+  breaklines=true,
+  showstringspaces=false,
+  columns=fullflexible,
+  xleftmargin=0.5em,
+  xrightmargin=0.5em
+}
+
+\newcommand{\vv}{\mathbf{v}}
+\newcommand{\EE}{\mathbf{E}}
+\newcommand{\BB}{\mathbf{B}}
+
+\title{Project 2: Boris Pusher and Particle--Mesh Coupling\\[0.3em]
+\large Part I: the physics. Part II: how it is implemented in C++}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+\tableofcontents
+\bigskip
+
+%=====================================================================
+\part{The physics and numerics}
+%=====================================================================
+
+\section{A charged particle in electric and magnetic fields}
+\label{sec:lorentz}
+
+A particle with charge $q$, mass $m$, position $\mathbf r=(x,y)$ and velocity
+$\vv=(v_x,v_y,v_z)$ obeys the Lorentz force law
+\begin{equation}
+  m\frac{d\vv}{dt} = q\,(\EE + \vv\times\BB), \qquad \frac{d\mathbf r}{dt}=\vv .
+  \label{eq:lorentz}
+\end{equation}
+Position is two-dimensional (the grid is 2D) but $\vv$, $\EE$, $\BB$ keep all three
+components, because $\vv\times\BB$ is a 3D cross product and a particle can pick up
+an out-of-plane velocity. This is the usual ``2D3V'' setting.
+
+\subsection{Uniform magnetic field: gyration}
+Take $\EE=0$ and $\BB=B_0\hat{\mathbf z}$, with $B_0$ a constant (the ``0'' means
+``uniform background value''). Then $\dot v_x=\omega_c v_y$, $\dot v_y=-\omega_c v_x$ with
+\begin{equation}
+  \boxed{\omega_c=\frac{qB_0}{m}}
+\end{equation}
+the \textbf{cyclotron (gyro) frequency}: the angular frequency at which the velocity
+vector rotates. The particle moves on a circle:
+\begin{equation}
+  T=\frac{2\pi}{\omega_c}\ \text{(period)},\qquad
+  r_L=\frac{|\vv_\perp|}{\omega_c}\ \text{(Larmor radius)},
+\end{equation}
+and the speed $|\vv|$ is constant, since a magnetic force is perpendicular to $\vv$ and does no
+work. For $q=m=B_0=v=1$: $\omega_c=1$, $T=2\pi$, $r_L=1$. Starting at the origin with
+$\vv=(1,0,0)$ the orbit is
+\[
+  x(t)=\frac{v_0}{\omega_c}\sin\omega_c t,\qquad
+  y(t)=\frac{v_0}{\omega_c}(\cos\omega_c t-1),
+\]
+a circle of radius $r_L$ centred on the guiding centre $(0,-r_L)$.
+
+This is exactly why the first test uses $\EE=(0,0,0)$ and $\BB=(0,0,B_0)$: the answer is known
+in closed form, so the numerical pusher can be checked against it (constant speed, correct
+radius, return to the start after one period).
+
+\section{The Boris pusher}
+\label{sec:boris}
+
+\subsection{The idea}
+Integrating \eqref{eq:lorentz} with a naive explicit scheme makes the orbit spiral outward
+(the energy drifts). The Boris algorithm avoids this by splitting the velocity update into
+three parts, one of which is an \emph{exact rotation}:
+\begin{align}
+  \vv^- &= \vv^n + \frac{q\Delta t}{2m}\EE^{n+1/2} &&\text{(half electric kick)}\\
+  \mathbf t &= \frac{q\Delta t}{2m}\BB^{n+1/2},\qquad
+  \mathbf s=\frac{2\mathbf t}{1+t^2} &&\text{(rotation parameters)}\\
+  \vv' &= \vv^- + \vv^-\times\mathbf t,\qquad
+  \vv^+ = \vv^- + \vv'\times\mathbf s &&\text{(magnetic rotation)}\\
+  \vv^{n+1} &= \vv^+ + \frac{q\Delta t}{2m}\EE^{n+1/2} &&\text{(half electric kick)}
+\end{align}
+The two middle formulas rotate $\vv^-$ about the direction of $\BB$ by an angle
+$\theta=2\arctan(|\mathbf t|)$ without changing its length: $|\vv^+|=|\vv^-|$ exactly, for any
+$\Delta t$. So with $\EE=0$ the kinetic energy is conserved to machine precision.
+
+\subsection{Leapfrog in time and space}
+Following the course slides, one time step is
+\begin{enumerate}
+  \item drift half a step: $\mathbf r^{n+1/2}=\mathbf r^n+\vv^n\Delta t/2$;
+  \item evaluate $\EE$ and $\BB$ \emph{at $\mathbf r^{n+1/2}$};
+  \item Boris velocity update as above;
+  \item drift the other half: $\mathbf r^{n+1}=\mathbf r^{n+1/2}+\vv^{n+1}\Delta t/2$.
+\end{enumerate}
+Sampling the fields at the midpoint is what makes the scheme second-order accurate in time.
+
+\subsection{Choosing $\Delta t$: why ``1000 steps per period''}
+In the demo we set $\Delta t = T/1000$. The velocity rotates by about
+$\omega_c\Delta t=2\pi/1000\approx0.0063$~rad per step. The speed is conserved for any
+$\Delta t$, but the numerical rotation angle is $\theta=2\arctan(\omega_c\Delta t/2)
+\approx\omega_c\Delta t\,[1-(\omega_c\Delta t)^2/12]$, so the \emph{phase} error decreases
+like $\Delta t^2$. Real codes typically use a few tens of steps per gyration; we use 1000
+(demo) and 2000 (test) because it is cheap and makes the ``return to start'' test tight.
+Try 20 to see the final position drift while the speed stays exactly 1.
+
+\section{From one particle to a plasma: the hybrid kinetic model}
+
+The professor's model (slide~1) treats ions kinetically and electrons as a fluid:
+\begin{align}
+  \frac{\partial \BB}{\partial t}&=-\nabla\times\EE, \qquad \mu_0\mathbf j=\nabla\times\BB
+    &&\text{(Faraday, Amp\`ere)}\\
+  \frac{\partial f_p}{\partial t}&=-\vv\cdot\nabla f_p-\frac{\EE+\vv\times\BB}{m_p}\cdot\nabla_{\vv}f_p
+    &&\text{(ion Vlasov equation)}\\
+  n_i&=\sum_p\!\int f_p\,d^3v,\qquad
+  \vv_i=\frac{1}{n_i}\sum_p\!\int\vv f_p\,d^3v &&\text{(ion moments)}\\
+  n_i&=n_e=n,\qquad \vv_e=\vv_i-\frac{\mathbf j}{ne} &&\text{(quasi-neutrality)}\\
+  \EE&=-\vv_e\times\BB-\frac{1}{en}\nabla\!\cdot\!\mathbf P_e-\frac{m_e}{e}\frac{d\vv_e}{dt}
+    &&\text{(generalized Ohm's law)}
+\end{align}
+
+\subsection{Statistical Lagrangian (particle) approach}
+The distribution function $f_p(\mathbf r,\vv)$ lives in a 6D phase space; discretizing it on a
+grid is expensive. Instead we \textbf{sample} it with $N$ \emph{macro-particles}. Each
+macro-particle represents many real ions and carries a \textbf{statistical weight} $w_p$
+(the number of real ions it stands for). The Vlasov equation says $f$ is transported along
+the characteristics, which are precisely the particle trajectories \eqref{eq:lorentz}. So
+``solving Vlasov'' becomes ``push every macro-particle with the Boris pusher''.
+
+\subsection{What is implemented now, and what is not}
+Implemented: Step~1 (one particle, prescribed fields), Step~2 (many particles, moments on the mesh
+and fields gathered from the mesh). \textbf{Not yet implemented:} solving Faraday's law, Amp\`ere's
+law and Ohm's law for $\EE$ and $\BB$ (and the Yee-staggered grid they need). For now $\EE$ and
+$\BB$ on the grid are prescribed and never evolve.
+
+\section{Particle--mesh coupling}
+\label{sec:pm}
+
+Particles sit at arbitrary positions; fields and moments live on the \textbf{grid nodes}
+$\mathbf r_{ij}=(x_0+i\Delta x,\ y_0+j\Delta y)$, with $i=0,\dots,n_x-1$ and $j=0,\dots,n_y-1$
+($n_x,n_y$ are the numbers of \emph{nodes}, so there are $n_x-1$ by $n_y-1$ cells). A
+\textbf{shape function} $S$ transfers information between the two.
+
+\subsection{First-order (bilinear) shape function}
+A particle at $(x_p,y_p)$ lies in the cell whose lower-left node is $(i_0,j_0)$. Define the
+fractional position inside the cell
+\[
+  f_x=\frac{x_p-x_{i_0}}{\Delta x},\qquad f_y=\frac{y_p-y_{j_0}}{\Delta y},\qquad f_x,f_y\in[0,1].
+\]
+The weights of the four surrounding nodes are the products of 1D linear weights (slide~5):
+\begin{align}
+  S_{00}&=(1-f_x)(1-f_y), & S_{10}&=f_x(1-f_y),\nonumber\\
+  S_{01}&=(1-f_x)f_y,     & S_{11}&=f_xf_y .
+\end{align}
+Each is the area of the rectangle opposite to that corner, so the closer the particle is to a
+node the larger that node's weight. They always sum to 1.
+
+\paragraph{Worked example.} $\Delta x=\Delta y=1$, origin $(0,0)$, particle at $(2.3,\,5.6)$:
+$i_0=2$, $j_0=5$, $f_x=0.3$, $f_y=0.6$.
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+Node & Weight & Value \\
+\midrule
+$(2,5)$ & $S_{00}=(1-f_x)(1-f_y)$ & $0.7\times0.4=0.28$\\
+$(3,5)$ & $S_{10}=f_x(1-f_y)$     & $0.3\times0.4=0.12$\\
+$(2,6)$ & $S_{01}=(1-f_x)f_y$     & $0.7\times0.6=0.42$\\
+$(3,6)$ & $S_{11}=f_xf_y$         & $0.3\times0.6=0.18$\\
+\midrule
+Sum & & $1.00$\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Deposit: particles $\to$ grid moments}
+For a node $(i,j)$ the summed weight is $W_{ij}=\sum_p S(\mathbf r_p-\mathbf r_{ij})\,w_p$. Two
+moments are built (slides~4--5):
+\begin{align}
+  n_{ij}&=\frac{1}{\Delta x\,\Delta y}\sum_p S(\mathbf r_p-\mathbf r_{ij})\,w_p
+        =\frac{W_{ij}}{\Delta x\,\Delta y},\\
+  \vv_{ij}&=\frac{\sum_p \vv_p\,S(\mathbf r_p-\mathbf r_{ij})\,w_p}{\sum_p S(\mathbf r_p-\mathbf r_{ij})\,w_p}
+        =\frac{1}{W_{ij}}\sum_p\vv_p\,S\,w_p .
+\end{align}
+\begin{itemize}
+  \item $n_{ij}$ is a \textbf{density}: weight (number of real ions) \emph{per unit area}. Dividing by the
+        cell area $\Delta x\,\Delta y$ is what makes the result independent of the grid spacing;
+        $\sum_{ij}n_{ij}\Delta x\Delta y=\sum_pw_p$ holds for any $\Delta x,\Delta y$.
+  \item $\vv_{ij}$ is the weighted \emph{average} velocity of the particles near the node. Note it is
+        divided by the summed weight $W_{ij}$, \emph{not} by the density $n_{ij}$ (the cell-area
+        factor would otherwise wrongly rescale the velocity).
+  \item \emph{Convention to check with the professor:} here $w_p$ is a particle count. If the
+        course defines $w_p$ so that it already includes the $1/(\Delta x\Delta y)$ factor, that factor
+        must be removed.
+\end{itemize}
+
+\subsection{Gather: grid $\to$ particle}
+The field seen by a particle is the weighted average of the four surrounding nodes (slide~6):
+\begin{equation}
+  \mathbf Q(\mathbf r_p)=\sum_{ij}Q_{ij}\,S(\mathbf r_p-\mathbf r_{ij}).
+\end{equation}
+Deposit and gather use the \emph{same} shape function. With different shapes a particle would exert a
+spurious force on itself (\emph{self-force}) and momentum would not be conserved.
+
+\subsection{Why bilinear interpolation is easy to test}
+It reproduces any function $a+bx+cy$ \emph{exactly}. Gathering a linear field must therefore return the
+exact value anywhere; a bug in indices or weights breaks this immediately.
+
+\section{The PIC loop and the tests}
+
+The cycle of slide~6 is: \textbf{move} particles (Boris) $\to$ \textbf{accumulate moments} (deposit)
+$\to$ [\textbf{field equations}, not implemented yet] $\to$ \textbf{fields to particles} (gather)
+$\to$ repeat. Our tests check the physics of each piece:
+\begin{center}
+\begin{tabular}{p{4.2cm}p{9.5cm}}
+\toprule
+Test & What it verifies\\
+\midrule
+Speed conservation & $|\vv|$ constant to $10^{-9}$ over a full gyration (Boris rotation is exact)\\
+Gyroradius & the orbit stays on the circle of radius $r_L$ around the guiding centre\\
+Return to start & after one period $T$ the particle is back at its origin\\
+Weight conservation & $\sum n_{ij}\Delta x\Delta y=\sum w_p$, for unit \emph{and} non-unit spacing\\
+Density and mean velocity & at a node, $n=W/(\Delta x\Delta y)$ and $\vv$ is the weighted average\\
+Linear-field exactness & gather reproduces $a+bx+cy$ exactly\\
+Consistency & one particle on the grid follows the same trajectory as in Step~1\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+%=====================================================================
+\part{Implementation in C++}
+%=====================================================================
+
+\section{Project layout}
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+File & Role \\
+\midrule
+\texttt{vec3.hpp} & 3-vector type and its operators\\
+\texttt{particle.hpp} & \texttt{Particle}: $x,y,\vv,q,m,w_p$\\
+\texttt{boris\_pusher.\{hpp,cpp\}} & Boris velocity update (Section~\ref{sec:boris})\\
+\texttt{step1\_single\_particle.\{hpp,cpp\}} & leapfrog wrapper, fields given as functions\\
+\texttt{grid.hpp} & \texttt{Grid2D}: nodes, moments, fields\\
+\texttt{interpolation.\{hpp,cpp\}} & weights, deposit, gather (Section~\ref{sec:pm})\\
+\texttt{step2\_pic\_loop.\{hpp,cpp\}} & leapfrog wrapper, fields gathered from the grid\\
+\texttt{main.cpp} & demo of both steps\\
+\texttt{tests/*.cpp} & the tests of the table above\\
+\bottomrule
+\end{tabular}
+\end{center}
+A \texttt{.hpp} \emph{header} declares things (\emph{what exists}); a \texttt{.cpp} file defines them
+(\emph{how they work}). \lstinline|#pragma once| stops a header from being included twice.
+To build and test: \texttt{cmake -S . -B build \&\& cmake --build build \&\& ctest --test-dir build}.
+
+\section{Basic types: \texttt{Vec3}, \texttt{Particle}, and operator overloading}
+
+\begin{lstlisting}
+struct Vec3 {
+    double x = 0.0;
+    double y = 0.0;
+    double z = 0.0;
+};
+\end{lstlisting}
+A \texttt{struct} bundles named values. The \texttt{= 0.0} are \emph{default member initializers}: a
+\lstinline|Vec3 a;| starts as $(0,0,0)$. A value is written with braces in member order:
+\lstinline|Vec3{0.0, 0.0, 1.0}| means $x=0,y=0,z=1$ (\emph{aggregate initialization}). The same holds for
+\texttt{Particle}, where \lstinline|Particle p;| starts with $q=m=w=1$ and position $(0,0)$.
+
+\subsection{Operators on \texttt{Vec3}}
+We teach C++ what \texttt{+}, \texttt{-}, \texttt{*} mean for vectors by defining functions whose names
+are the operators (\emph{operator overloading}):
+\begin{lstlisting}
+inline Vec3 operator+(const Vec3& a, const Vec3& b) {
+    return {a.x + b.x, a.y + b.y, a.z + b.z};
+}
+\end{lstlisting}
+After this, \lstinline|c = a + b;| compiles. \texttt{cross(a,b)}, \texttt{dot(a,b)} and \texttt{norm(a)}
+are ordinary functions. \lstinline|inline| lets the definition live in a header included by many files.
+
+\subsection{Why \texttt{+=} was missing, and what it looks like}
+\lstinline|a += b| is a \emph{different operator} from \lstinline|a = a + b|. C++ does not derive one from
+the other: if you never define \texttt{operator+=} for \texttt{Vec3}, writing \texttt{+=} on vectors is a
+compile error. Originally I only defined \texttt{operator+}, so the deposit code had to spell out
+\lstinline|g.v[k] = g.v[k] + ...|. It is now defined:
+\begin{lstlisting}
+inline Vec3& operator+=(Vec3& a, const Vec3& b) {
+    a.x += b.x;  a.y += b.y;  a.z += b.z;
+    return a;
+}
+\end{lstlisting}
+Points to notice: the left operand \texttt{a} is a \emph{non-const reference} (it is modified in place),
+the right one a \emph{const reference} (only read), and it returns \texttt{a} by reference so chains like
+\lstinline|(a += b) += c| work. This is also slightly cheaper than \texttt{a = a + b}, which builds a
+temporary vector. Deposit and gather now use \texttt{+=}.
+
+\section{Numbers and types: signed, unsigned, \texttt{size\_t}, \texttt{static\_cast}}
+
+\subsection{Signed and unsigned integers}
+An \lstinline|int| is \textbf{signed}: it can be negative. With 32 bits its range is about
+$-2.1\times10^9$ to $+2.1\times10^9$. An \textbf{unsigned} integer has no sign bit, so it can only be
+$\ge0$, and uses that bit to reach twice as high: an \lstinline|unsigned int| covers $0$ to about
+$4.3\times10^9$.
+
+The catch is what happens below zero. Unsigned arithmetic \emph{wraps around}:
+\begin{lstlisting}
+unsigned int a = 0;
+a = a - 1;              // NOT -1: it becomes 4294967295
+\end{lstlisting}
+This causes classic bugs, e.g.\ \lstinline|for (std::size_t i = n-1; i >= 0; --i)| never terminates,
+because an unsigned $i$ is always $\ge0$. Comparing a signed with an unsigned number is another trap
+(the signed one is silently converted), which is why the compiler warns (\texttt{-Wall} includes
+\texttt{-Wsign-compare}).
+
+\subsection{What is \texttt{std::size\_t}?}
+\texttt{std::size\_t} is the \emph{unsigned} integer type that C++ uses for sizes and counts. It is
+guaranteed large enough to hold the size of the biggest object your machine can address: on this
+64-bit Linux it is 64 bits wide (up to about $1.8\times10^{19}$). \texttt{std::vector::size()} returns a
+\texttt{size\_t}, and the constructor \lstinline|std::vector<double>(count, value)| takes a
+\texttt{size\_t} count. The reasoning is that a size can never be negative, and a plain 32-bit
+\texttt{int} would limit arrays to about 2 billion elements.
+
+\subsection{Why \texttt{int} for grid indices but \texttt{size\_t} for vector sizes?}
+The cell index is computed as $\lfloor (x-x_0)/\Delta x\rfloor$, which is \emph{negative} for a particle
+left of the grid. Then \texttt{std::clamp} pushes it back into range. With an unsigned index the negative
+value would wrap to a gigantic number before we could clamp it. So indices $i,j$ stay \texttt{int}, and we
+convert explicitly only where a \texttt{size\_t} is required.
+
+\subsection{\texttt{static\_cast<T>(value)}}
+It \emph{explicitly converts} \texttt{value} to type \texttt{T}, checked at compile time. Two uses:
+\begin{lstlisting}
+int i0 = static_cast<int>(std::floor((x - g.x0) / g.dx));   // double -> int
+n(static_cast<std::size_t>(nx_) * ny_, 0.0)                 // int -> size_t
+\end{lstlisting}
+In the first line \texttt{std::floor} returns a \texttt{double} (say $2.0$); an array index must be an
+integer, so we cast to the integer $2$. We call \texttt{floor} first because converting a
+\texttt{double} straight to \texttt{int} truncates toward zero ($-0.3\to0$), whereas the correct cell
+for $-0.3$ is $-1$. In the second line, casting the first factor makes the whole product unsigned,
+matching \texttt{vector}'s size type and avoiding a sign-mismatch warning. Compared to the old C-style
+\lstinline|(int)x|, \texttt{static\_cast} is easy to search for, states intent, and refuses nonsensical
+conversions.
+
+\section{\texttt{Grid2D}: constructor, \texttt{nx\_}, \texttt{ny\_}, and indexing}
+
+\begin{lstlisting}
+struct Grid2D {
+    int nx, ny;            // number of NODES in x and y
+    double dx, dy;         // node spacing
+    double x0, y0;         // coordinates of node (0,0)
+    std::vector<double> n; // density,  nx*ny entries
+    std::vector<Vec3> v, E, B;
+
+    Grid2D(int nx_, int ny_, double dx_, double dy_, double x0_ = 0.0, double y0_ = 0.0)
+        : nx(nx_), ny(ny_), dx(dx_), dy(dy_), x0(x0_), y0(y0_),
+          n(static_cast<std::size_t>(nx_) * ny_, 0.0),
+          v(static_cast<std::size_t>(nx_) * ny_), ... {}
+    int index(int i, int j) const { return j * nx + i; }
+};
+\end{lstlisting}
+
+\paragraph{What are \texttt{nx\_} and \texttt{ny\_}?} They are the constructor's \emph{parameters}:
+the numbers of nodes in $x$ and $y$ that the caller asks for. The members are called \texttt{nx} and
+\texttt{ny}. The trailing underscore is only a naming habit to give the parameter a different name from
+the member it initializes (so \texttt{nx(nx\_)} reads ``member \texttt{nx} is initialized with parameter
+\texttt{nx\_}''). $n_x$ counts \emph{nodes}, not cells: the number of cells is $n_x-1$.
+
+\paragraph{The initializer list.} The part after the colon, \lstinline|: nx(nx_), ny(ny_), ...|, builds the
+members directly with the given values (better than assigning inside the body). Members are initialized in the
+order they are \emph{declared}, so the list should follow that order. \lstinline|n(count, 0.0)| creates
+a vector with \texttt{count} copies of \texttt{0.0}. The defaults \lstinline|x0_ = 0.0| make the last two
+arguments optional.
+
+\paragraph{The call \lstinline|Grid2D grid(21, 21, 1.0, 1.0, 0.0, 0.0);|} creates a grid with $21\times21$
+nodes, spacing $1$, origin $(0,0)$: $20\times20$ cells covering $[0,20]^2$, and arrays of $441$ entries.
+
+\paragraph{Flattening 2D into 1D.} A \texttt{std::vector} is one-dimensional, so node $(i,j)$ is stored at
+position $j\,n_x+i$ (\emph{row-major} order: a whole row of $x$ values, then the next row). With $n_x=4$,
+node $(2,1)$ has index $1\cdot4+2=6$. The trailing \lstinline|const| in \texttt{index(...) const} promises
+the function does not modify the grid, so it may be called on a \lstinline|const Grid2D&|.
+
+\section{References and \texttt{const}: the \texttt{\&} in function signatures}
+
+\begin{lstlisting}
+void boris_push(Particle& p, const Vec3& E, const Vec3& B, double dt);
+\end{lstlisting}
+Here \texttt{\&} is \textbf{not} ``take the address''. It has two meanings depending on where it appears:
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+In a declaration (\lstinline|Particle& p|) & a \textbf{reference}: another name for an existing object\\
+In an expression (\lstinline|&p|) & the \textbf{address-of} operator (gives a pointer)\\
+\bottomrule
+\end{tabular}
+\end{center}
+By default C++ passes arguments \emph{by value}, i.e.\ it copies them:
+\begin{lstlisting}
+void f(Particle p)  { p.v = Vec3{}; }   // changes a COPY; caller unaffected
+void g(Particle& p) { p.v = Vec3{}; }   // changes the caller's particle itself
+\end{lstlisting}
+\begin{itemize}
+  \item \lstinline|Particle& p|: the function must \textbf{modify} the caller's particle (it updates its velocity).
+  \item \lstinline|const Vec3& E|: the function only \textbf{reads} $\EE$. No copy is made, and \texttt{const}
+        makes the compiler forbid accidental changes.
+  \item \lstinline|double dt|: one number is as cheap to copy as to reference, so pass by value.
+\end{itemize}
+Rule of thumb: small built-in types by value; bigger objects by \texttt{const}\,\&; objects you must
+modify by non-const \&.
+
+\section{Lambdas: how the fields are given in Step 1}
+
+\begin{lstlisting}
+const double B0 = 1.0;
+const auto E_of = [](double, double) { return Vec3{0.0, 0.0, 0.0}; };
+const auto B_of = [B0](double, double) { return Vec3{0.0, 0.0, B0}; };
+\end{lstlisting}
+\begin{itemize}
+  \item \texttt{B0} is a named constant for $B_0$ (Section~\ref{sec:lorentz}); change one line to try another
+        field strength.
+  \item \lstinline|Vec3{0.0, 0.0, 0.0}| is $(0,0,0)$, so $\EE=0$; \lstinline|Vec3{0.0, 0.0, B0}| is
+        $(0,0,B_0)$, so $\BB=B_0\hat{\mathbf z}$, out of the plane, giving the circular orbit.
+  \item \texttt{E\_of} and \texttt{B\_of} are \textbf{functions stored in variables} (\emph{lambda expressions}):
+        \lstinline|[capture](parameters) { body }|. The \emph{capture list} \lstinline|[B0]| copies
+        \texttt{B0} into the lambda so the body can use it; \lstinline|[]| captures nothing.
+  \item The parameters $(x,y)$ are the position where the field is evaluated. They have \textbf{no names}
+        because the field is uniform and never uses them (an unused named parameter would trigger a warning).
+  \item \texttt{auto} lets the compiler deduce the (unnamed, compiler-generated) lambda type.
+\end{itemize}
+They are passed to \texttt{advance\_particle}, whose parameters have the type
+\lstinline|using FieldFunc = std::function<Vec3(double, double)>;| (``any callable taking two doubles and
+returning a \texttt{Vec3}''). Making the field a function means a position-dependent field can later be
+plugged in without changing the pusher.
+
+\section{The Boris code, line by line}
+
+\begin{lstlisting}
+void boris_push(Particle& p, const Vec3& E, const Vec3& B, double dt) {
+    const double qmdt2 = 0.5 * p.q * dt / p.m;             // q*dt/(2m)
+
+    const Vec3 v_minus = p.v + qmdt2 * E;                  // half electric kick
+
+    const Vec3 t = qmdt2 * B;                              // t = (q dt/2m) B
+    const Vec3 v_prime = v_minus + cross(v_minus, t);      // v' = v- + v- x t
+    const Vec3 s = (2.0 / (1.0 + dot(t, t))) * t;          // s = 2t/(1+t^2)
+    const Vec3 v_plus = v_minus + cross(v_prime, s);       // v+ = v- + v' x s
+
+    p.v = v_plus + qmdt2 * E;                              // half electric kick
+}
+\end{lstlisting}
+It is a direct transcription of the formulas of Section~\ref{sec:boris}. \texttt{const} on the local
+variables says ``computed once, never changed''. \texttt{qmdt2 * E} uses the operator
+\lstinline|operator*(double, const Vec3&)|. Only the velocity is updated; the position half-steps are done
+by the caller, since the caller also decides \emph{where} $\EE$ and $\BB$ are sampled.
+
+The Step-1 wrapper does exactly the four leapfrog stages:
+\begin{lstlisting}
+p.x += p.v.x * dt / 2.0;   p.y += p.v.y * dt / 2.0;   // drift half step
+const Vec3 E = E_of(p.x, p.y);  const Vec3 B = B_of(p.x, p.y);  // fields at r^{n+1/2}
+boris_push(p, E, B, dt);                                // velocity update
+p.x += p.v.x * dt / 2.0;   p.y += p.v.y * dt / 2.0;   // drift other half
+\end{lstlisting}
+The Step-2 version (\texttt{advance\_particles}) is identical except that the fields come from
+\lstinline|gather(g.E, g, p.x, p.y)| and it loops over all particles with \lstinline|for (Particle& p : particles)|.
+
+\section{Range-based \texttt{for} and filling the field on the grid}
+
+\begin{lstlisting}
+Grid2D grid(21, 21, 1.0, 1.0, 0.0, 0.0);
+for (Vec3& B : grid.B) {
+    B = Vec3{0.0, 0.0, 1.0};
+}
+\end{lstlisting}
+The first line was explained in Section~9. The loop reads ``for each element of \texttt{grid.B}, call it
+\texttt{B}'' and is shorthand for
+\begin{lstlisting}
+for (std::size_t k = 0; k < grid.B.size(); ++k) { Vec3& B = grid.B[k]; ... }
+\end{lstlisting}
+The \texttt{\&} is essential: \texttt{B} is then a reference to the element \emph{inside} the grid. Without it
+(\lstinline|Vec3 B|) each element would be copied, only the copy would change, and the grid would stay all zeros.
+The body sets $\BB=(0,0,1)$ at every node: a uniform $B_z=1$. (The loop variable and the member are both called
+\texttt{B}; legal, but easy to confuse.) When we only \emph{read} numbers, as in
+\lstinline|for (double n_ij : grid.n)|, no \texttt{\&} is needed.
+
+\section{The interpolation code in detail}
+
+\subsection{\texttt{bilinear\_weights}}
+\begin{lstlisting}
+int i0 = static_cast<int>(std::floor((x - g.x0) / g.dx));
+int j0 = static_cast<int>(std::floor((y - g.y0) / g.dy));
+i0 = std::clamp(i0, 0, g.nx - 2);
+j0 = std::clamp(j0, 0, g.ny - 2);
+const double fx = (x - g.node_x(i0)) / g.dx;
+const double fy = (y - g.node_y(j0)) / g.dy;
+cw.w00 = (1.0 - fx) * (1.0 - fy);   cw.w10 = fx * (1.0 - fy);
+cw.w01 = (1.0 - fx) * fy;           cw.w11 = fx * fy;
+\end{lstlisting}
+\begin{enumerate}
+  \item \textbf{Find the cell}: $i_0,j_0$ index the lower-left node (\texttt{floor} + \texttt{static\_cast},
+        Section~8). The other corners are $(i_0+1,j_0)$, $(i_0,j_0+1)$, $(i_0+1,j_0+1)$.
+  \item \textbf{Clamp}: \lstinline|std::clamp(v, lo, hi)| forces $v$ into $[lo,hi]$. Limiting $i_0$ to
+        $[0,n_x-2]$ guarantees $i_0+1$ is a valid index (no out-of-bounds memory access). It does \emph{not}
+        make a particle that is truly outside the domain legal: such a particle is \emph{extrapolated} from the
+        edge cell, with weights outside $[0,1]$ (possibly negative). Boundary conditions come later.
+  \item \textbf{Fractions and weights}: exactly the formulas of Section~\ref{sec:pm}, returned in a small
+        \texttt{CellWeights} struct.
+\end{enumerate}
+
+\subsection{\texttt{deposit\_moments}}
+\begin{lstlisting}
+std::fill(g.n.begin(), g.n.end(), 0.0);               // reset accumulators
+std::fill(g.v.begin(), g.v.end(), Vec3{});
+for (const Particle& p : particles) {
+    const CellWeights cw = bilinear_weights(g, p.x, p.y);
+    const int idx00 = g.index(cw.i0, cw.j0);   // ... idx10, idx01, idx11
+    g.n[idx00] += cw.w00 * p.w;                // summed weight  W_ij
+    g.v[idx00] += (cw.w00 * p.w) * p.v;        // summed weight*velocity (uses Vec3::+=)
+    // ... same for the other three corners
+}
+const double inv_cell_area = 1.0 / (g.dx * g.dy);
+for (std::size_t k = 0; k < g.v.size(); ++k) {
+    if (g.n[k] > 0.0) g.v[k] = (1.0 / g.n[k]) * g.v[k];   // weighted MEAN velocity
+    g.n[k] *= inv_cell_area;                                // weight -> density
+}
+\end{lstlisting}
+\begin{itemize}
+  \item \lstinline|for (const Particle& p : particles)|: read-only reference, so no particle is copied and none
+        can be modified.
+  \item Reset first, otherwise deposits from the previous step would pile up.
+  \item \textbf{Order matters}: the velocity is divided by the \emph{summed weight} $W_{ij}$ \emph{before}
+        \texttt{n} is turned into a density. If \texttt{n} were divided by the cell area first, the velocity would be
+        wrongly rescaled by $\Delta x\Delta y$.
+  \item \lstinline|if (g.n[k] > 0.0)| avoids dividing by zero at nodes no particle touched.
+  \item \lstinline|+=| on \texttt{double} and on \texttt{Vec3} (Section~7.2).
+\end{itemize}
+
+\subsection{\texttt{gather}}
+\begin{lstlisting}
+Vec3 result;
+result += cw.w00 * field[g.index(cw.i0,     cw.j0)];
+result += cw.w10 * field[g.index(cw.i0 + 1, cw.j0)];
+result += cw.w01 * field[g.index(cw.i0,     cw.j0 + 1)];
+result += cw.w11 * field[g.index(cw.i0 + 1, cw.j0 + 1)];
+return result;
+\end{lstlisting}
+It uses the same \texttt{bilinear\_weights} as deposit, which is how the ``same shape function both ways''
+requirement of Section~\ref{sec:pm} is enforced in code. It accepts any field array (\texttt{g.E} or
+\texttt{g.B}) as a \lstinline|const std::vector<Vec3>&|.
+
+\section{Random particles}
+
+\begin{lstlisting}
+std::mt19937 rng(42);
+std::uniform_real_distribution<double> pos_dist(2.0, 18.0);
+std::uniform_real_distribution<double> vel_dist(-0.5, 0.5);
+\end{lstlisting}
+C++ separates an \textbf{engine}, which produces raw random bits, from a \textbf{distribution}, which shapes them.
+\begin{itemize}
+  \item \texttt{std::mt19937}: the Mersenne Twister engine (period $2^{19937}-1$). The \texttt{42} is the
+        \textbf{seed}. The sequence is \emph{deterministic}: the same seed always gives the same particles,
+        so runs are reproducible for debugging and testing.
+  \item \lstinline|std::uniform_real_distribution<double>(a, b)|: turns engine output into a \texttt{double}
+        uniform in $[a,b)$. The \lstinline|<double>| is a \emph{template argument} choosing the number type.
+  \item You draw a number with \lstinline|pos_dist(rng)|. Each call gives a new number, so \texttt{p.x} and
+        \texttt{p.y} get different values.
+\end{itemize}
+Positions in $[2,18]$ on a $[0,20]$ grid keep particles away from the edges while they move during the
+100 steps ($t=1$, speed $\le0.71$). Velocities in $[-0.5,0.5]$ give a small random spread; \texttt{v.z} stays $0$.
+
+\section{The \texttt{main} function}
+
+\begin{lstlisting}
+namespace {
+void run_step1_demo() { ... }
+void run_step2_demo() { ... }
+}   // namespace
+
+int main() {
+    std::cout << "kinetic_fisher: ...\n\n";
+    run_step1_demo();
+    run_step2_demo();
+    return 0;
+}
+\end{lstlisting}
+\lstinline|namespace { ... }| (an \emph{anonymous namespace}) makes the helper functions private to this file.
+\texttt{main} is the program's entry point; \lstinline|return 0| tells the operating system ``success''.
+
+\subsection{\texttt{run\_step1\_demo}}
+\begin{enumerate}
+  \item Define the fields (\texttt{E\_of}, \texttt{B\_of}, Section~11).
+  \item \lstinline|Particle p;| takes the defaults ($q=m=w=1$, at the origin); then
+        \lstinline|p.v = Vec3{1.0, 0.0, 0.0}| gives speed 1 along $x$.
+  \item \lstinline|omega_c = p.q * B0 / p.m|, \lstinline|period = 2.0 * std::numbers::pi / omega_c|
+        (\texttt{std::numbers::pi} comes from \texttt{<numbers>}, C++20), \lstinline|dt = period / 1000|.
+  \item Loop 1000 times calling \lstinline|advance_particle(p, E_of, B_of, dt)|. Since \texttt{p} is passed by
+        reference it is updated in place.
+  \item Print the initial and final speed (equal) and the final position ($\approx(0,0)$: one full period
+        returns to the start; the residual of order $10^{-5}$ is the $\Delta t^2$ phase error of
+        Section~\ref{sec:boris}). \lstinline|std::fixed| and \lstinline|std::setprecision(6)| just format the output.
+\end{enumerate}
+
+\subsection{\texttt{run\_step2\_demo}}
+\begin{enumerate}
+  \item Build the grid and fill $\BB=(0,0,1)$ (Sections~9 and~13).
+  \item \lstinline|std::vector<Particle> particles(N)| creates $N=200$ default particles; the loop
+        \lstinline|for (Particle& p : particles)| (reference!) gives each a random position and velocity,
+        $q=m=w=1$, and accumulates \texttt{total\_weight} ($=200$).
+  \item 100 calls of \lstinline|advance_particles(particles, grid, dt)|, $\Delta t=0.01$. Each particle:
+        half drift, \texttt{gather} $\EE,\BB$, Boris push, half drift. Because $\BB$ is uniform, every gather
+        returns $(0,0,1)$, so each particle gyrates as in Step~1.
+  \item \lstinline|deposit_moments(grid, particles)| fills \texttt{grid.n} and \texttt{grid.v}.
+  \item Check: $\sum_{ij}n_{ij}\Delta x\Delta y$ must equal \texttt{total\_weight}; the demo prints both
+        (they agree because each particle's four weights sum to 1, and the cell-area factors cancel).
+\end{enumerate}
+
+\section{Summary: physics $\leftrightarrow$ code}
+
+\begin{center}
+\begin{tabular}{p{5.2cm}p{8.6cm}}
+\toprule
+Physics & C++ \\
+\midrule
+Lorentz force, Boris rotation & \texttt{boris\_push} in \texttt{boris\_pusher.cpp}\\
+Leapfrog drift--kick--drift & \texttt{advance\_particle}, \texttt{advance\_particles}\\
+Prescribed $\EE,\BB$ (Step 1) & lambdas \texttt{E\_of}, \texttt{B\_of}, type \texttt{FieldFunc}\\
+Grid nodes, moments, fields & \texttt{Grid2D} (flattened \texttt{std::vector}s, \texttt{index(i,j)})\\
+Bilinear shape function $S$ & \texttt{bilinear\_weights}\\
+Moments $n_{ij}$, $\vv_{ij}$ & \texttt{deposit\_moments} (uses \texttt{+=} on \texttt{double} and \texttt{Vec3})\\
+Fields at the particle & \texttt{gather}\\
+Macro-particle weight $w_p$ & \texttt{Particle::w}\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent\textbf{C++ ideas used:} structs and default initializers, operator overloading (including
+\texttt{+=}), signed vs.\ unsigned integers and \texttt{size\_t}, \texttt{static\_cast}, constructors with
+initializer lists, references and \texttt{const}, lambdas and \texttt{std::function}, range-based
+\texttt{for}, \texttt{std::vector}, \texttt{<random>} engines and distributions, \texttt{<numbers>},
+anonymous namespaces.
+
+\end{document}

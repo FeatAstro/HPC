@@ -1,0 +1,27 @@
+\contentsline {section}{\numberline {1}Where the numbers \texttt {B0}, \texttt {0,0,0} and \texttt {0,0,B0} come from}{1}{section.1}%
+\contentsline {subsection}{\numberline {1.1}What is \texttt {B0}?}{2}{subsection.1.1}%
+\contentsline {subsection}{\numberline {1.2}Why \texttt {Vec3\{0.0, 0.0, 0.0\}} and \texttt {Vec3\{0.0, 0.0, B0\}}?}{2}{subsection.1.2}%
+\contentsline {subsection}{\numberline {1.3}The strange syntax: lambdas}{2}{subsection.1.3}%
+\contentsline {section}{\numberline {2}The physical quantities: $q$, $m$, $\mathbf {v}$, $w$ and $\omega _c$}{2}{section.2}%
+\contentsline {subsection}{\numberline {2.1}What is $\omega _c$?}{3}{subsection.2.1}%
+\contentsline {subsection}{\numberline {2.2}Why \texttt {steps\_per\_period = 1000}?}{3}{subsection.2.2}%
+\contentsline {section}{\numberline {3}\texttt {static\_cast<...>}}{3}{section.3}%
+\contentsline {section}{\numberline {4}References: why \texttt {\&} in the Boris pusher signature?}{4}{section.4}%
+\contentsline {subsection}{\numberline {4.1}Why references?}{4}{subsection.4.1}%
+\contentsline {section}{\numberline {5}Creating the grid and filling $\mathbf {B}$}{4}{section.5}%
+\contentsline {subsection}{\numberline {5.1}Line 1: calling the constructor}{5}{subsection.5.1}%
+\contentsline {subsection}{\numberline {5.2}Lines 2--4: range-based \texttt {for}}{5}{subsection.5.2}%
+\contentsline {section}{\numberline {6}Random particles: \texttt {std::mt19937} and distributions}{5}{section.6}%
+\contentsline {paragraph}{Why $[2,18]$ for positions?}{6}{section*.5}%
+\contentsline {paragraph}{Why $[-0.5, 0.5]$ for velocities?}{6}{section*.6}%
+\contentsline {section}{\numberline {7}The interpolation code in detail}{6}{section.7}%
+\contentsline {subsection}{\numberline {7.1}\texttt {bilinear\_weights}: the shape function $S$}{6}{subsection.7.1}%
+\contentsline {paragraph}{Worked example.}{6}{section*.7}%
+\contentsline {subsection}{\numberline {7.2}\texttt {deposit\_moments}: particles $\to $ grid}{7}{subsection.7.2}%
+\contentsline {subsection}{\numberline {7.3}\texttt {gather}: grid $\to $ particle}{7}{subsection.7.3}%
+\contentsline {subsection}{\numberline {7.4}Why the same weights for deposit and gather?}{7}{subsection.7.4}%
+\contentsline {subsection}{\numberline {7.5}Why the ``linear field'' test works}{7}{subsection.7.5}%
+\contentsline {section}{\numberline {8}The \texttt {main} function in detail}{8}{section.8}%
+\contentsline {subsection}{\numberline {8.1}Overall structure}{8}{subsection.8.1}%
+\contentsline {subsection}{\numberline {8.2}\texttt {run\_step1\_demo}: one particle in a uniform $B$}{8}{subsection.8.2}%
+\contentsline {subsection}{\numberline {8.3}\texttt {run\_step2\_demo}: $N$ particles and the mesh}{8}{subsection.8.3}%
