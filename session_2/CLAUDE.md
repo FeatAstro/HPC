@@ -22,6 +22,14 @@ ctest --test-dir build --output-on-failure
   both deposit (particle → grid moments `n_ij`, `v_ij`) and gather (grid → particle
   field) through the same `bilinear_weights()` function — this symmetry is required
   to avoid a self-force artifact (see slide 6).
+- **Weights**: following the slides, `w_p` is already a density contribution, so
+  `deposit_moments` computes `n_ij = Σ S·w_p` with *no* division by `dx·dy`; `Σ n_ij = Σ w_p`
+  for any spacing. `v_ij` is the weighted mean (divided by the summed weight).
+- **Grid indexing**: node `(i, j)` is stored at `j * nx + i` (row-major); `nx`, `ny` count
+  nodes, not cells. Always go through `Grid2D::index()`.
+- **Toolchain choices**: C++20 (`std::numbers::pi`), assert-based test executables run by
+  `ctest` (no test framework), own minimal `Vec3` (Eigen is not installed; kept custom on
+  purpose), HDF5 is linked in CMake but unused here.
 - **Boris pusher** (`boris_pusher.cpp`) implements the exact update from slide 7:
   half `E` accel → exact `B` rotation (`t`, `v'`, `s` trick) → half `E` accel.
   It only rotates/accelerates velocity; callers (`step1_single_particle.cpp`,
@@ -40,6 +48,23 @@ field solve — Faraday's law for `B`, Ampere's law for `j`, and the generalized
 Ohm's law for `E` (slide 1) — and the Yee-staggered grid layout that solve would
 need. Right now `Grid2D` is node-centered (not staggered) and `grid.E`/`grid.B`
 are just set directly by the caller; nothing evolves them.
+
+## To do
+
+- Self-consistent field solve on a Yee-staggered grid: Faraday, Ampere, generalized Ohm's
+  law, then the full PIC loop of slide 6 (moments → fields → gather → push). `Grid2D` is
+  not staggered yet.
+- Boundary conditions: particles outside the grid are currently clamped to the edge cell
+  and extrapolated (weights can be negative) instead of being wrapped or reflected.
+- More Step 2 test cases with known analytic answers once the field solve exists.
+- Minor: `main.cpp` uses `std::numbers::pi` without `#include <numbers>` (compiles through
+  a transitive include; add it explicitly).
+
+## Documentation
+
+`cpp_concepts.tex` (PDF tracked, aux/log/toc gitignored) explains the physics first, then the
+C++ used; rebuild with `latexmk -pdf cpp_concepts.tex` and keep it in sync when the code's
+conventions change. The repo root `README.md` describes both sessions.
 
 ## Layout
 
