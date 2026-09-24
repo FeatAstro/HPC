@@ -1,11 +1,12 @@
 # HPC Master Class — Projects
 
-Two C++ sessions, each a self-contained CMake project (C++, HDF5 available on the system).
+Two C++ sessions (plus an extension of session 2), each a self-contained CMake project (C++, HDF5 available on the system).
 
 | Folder | Topic |
 | --- | --- |
 | [`session_1/`](session_1) | Finite-difference convergence study |
 | [`session_2/`](session_2) | Boris pusher and particle–mesh coupling (PIC, prescribed fields) |
+| [`session_2_advanced/`](session_2_advanced) | Extension of session 2: self-consistent hybrid-kinetic PIC (fields solved) |
 
 ## session_1 — Finite-difference convergence
 
@@ -42,3 +43,21 @@ ctest --test-dir build --output-on-failure     # run the tests
 `session_2/cpp_concepts.tex` (PDF included) explains the physics and the C++ of both steps
 (build with `latexmk -pdf cpp_concepts.tex`), `tests_walkthrough.pdf` derives every test and
 `code_walkthrough.pdf` follows `main()` through each function; `session_2/CLAUDE.md` summarizes the conventions.
+
+## session_2_advanced — Hybrid-kinetic particle-in-cell (extension)
+
+Goes beyond the session: the same Steps 1–2, plus the field equations of the slides, so that the
+particles act back on the fields. Ions are kinetic macro-particles, electrons a massless fluid.
+
+- **Yee grid**: `E` and `j` on cell edges, `B` on cell faces, each component interpolated from where it lives.
+- **Field solver**: Ampère's law (no displacement current), generalized Ohm's law with
+  `v_e = v_i - j/(ne)` and an isothermal electron pressure, Faraday's law advanced with RK4; `div B`
+  stays at round-off.
+- **Full PIC loop** (predictor-corrector): deposit moments, solve fields, gather, push.
+- **Validation**: a uniform drift stays in equilibrium, and parallel ion-cyclotron and whistler waves
+  propagate at the frequency of the exact dispersion relation (about 1% agreement, energy conserved to
+  1e-5 of the wave energy).
+
+Normalised units (`mu0 = e = m_i = n0 = B0 = 1`); settings live in the structs `PlasmaParameters`,
+`IonLoading`, `WaveRunSettings`. Build, test and run as for session_2 (inside `session_2_advanced/`);
+its `cpp_concepts.pdf`, `tests_walkthrough.pdf` and `code_walkthrough.pdf` cover the full hybrid code.
