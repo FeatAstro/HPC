@@ -77,11 +77,11 @@ electrons exchange energy with a heat bath).
 
 ## Documentation
 
-`cpp_concepts.tex` (PDF tracked, aux/log/toc gitignored) explains the physics first, then the
+`cpp_concepts.tex` (like every `.tex` and `.pdf`, gitignored: local only) explains the physics first, then the
 C++ used; rebuild with `latexmk -pdf cpp_concepts.tex` and keep it in sync when the code's
-conventions change. `tests_walkthrough.tex` (PDF tracked) derives every test step by step (the wave
+conventions change. `tests_walkthrough.tex` derives every test step by step (the wave
 validation in full algebra); update it when a test or its tolerance changes. `code_walkthrough.tex`
-(PDF tracked) follows `main()` down the call tree and explains each function physically; update it
+follows `main()` down the call tree and explains each function physically; update it
 when the call structure or a demo changes. The repo root
 `README.md` describes both sessions.
 

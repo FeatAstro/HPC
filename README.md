@@ -40,9 +40,9 @@ ctest --test-dir build --output-on-failure     # run the tests
 ./build/kinetic_fisher                         # demo of the steps above
 ```
 
-`session_2/cpp_concepts.tex` (PDF included) explains the physics and the C++ of both steps
-(build with `latexmk -pdf cpp_concepts.tex`), `tests_walkthrough.pdf` derives every test and
-`code_walkthrough.pdf` follows `main()` through each function; `session_2/CLAUDE.md` summarizes the conventions.
+`session_2/CLAUDE.md` summarizes the conventions. The course slides and the LaTeX notes
+(`cpp_concepts`, `tests_walkthrough`, `code_walkthrough`) are kept locally and are not in the repository
+(`*.pdf` and `*.tex` are gitignored).
 
 ## session_2_advanced — Hybrid-kinetic particle-in-cell (extension)
 
@@ -59,5 +59,4 @@ particles act back on the fields. Ions are kinetic macro-particles, electrons a 
   1e-5 of the wave energy).
 
 Normalised units (`mu0 = e = m_i = n0 = B0 = 1`); settings live in the structs `PlasmaParameters`,
-`IonLoading`, `WaveRunSettings`. Build, test and run as for session_2 (inside `session_2_advanced/`);
-its `cpp_concepts.pdf`, `tests_walkthrough.pdf` and `code_walkthrough.pdf` cover the full hybrid code.
+`IonLoading`, `WaveRunSettings`. Build, test and run as for session_2 (inside `session_2_advanced/`).
