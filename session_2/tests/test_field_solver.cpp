@@ -168,7 +168,7 @@ void test_faraday_update_preserves_div_b() {
     std::cout << "test_faraday_update_preserves_div_b: passed\n";
 }
 
-} // namespace
+}
 
 int main() {
     test_curls_are_second_order();

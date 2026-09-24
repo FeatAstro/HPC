@@ -19,7 +19,7 @@ VectorField solve_fields_for_step(Grid2D& g, const PlasmaParameters& plasma,
     return magnetic_field_end;
 }
 
-} // namespace
+}
 
 void advance_hybrid_step(Grid2D& g, std::vector<Particle>& ions, const PlasmaParameters& plasma, double dt) {
     const VectorField magnetic_field_start = g.magnetic_field;

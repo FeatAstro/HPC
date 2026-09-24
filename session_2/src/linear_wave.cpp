@@ -26,7 +26,7 @@ double background_magnetic_energy(const Grid2D& g, const PlasmaParameters& plasm
     return 0.5 * background_field * background_field / plasma.vacuum_permeability * g.length_x() * g.length_y();
 }
 
-} // namespace
+}
 
 double parallel_wave_frequency(const PlasmaParameters& plasma, double background_field, double wave_number,
                                WaveBranch branch) {

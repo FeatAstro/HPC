@@ -13,6 +13,5 @@ struct IonLoading {
     unsigned random_seed = 1;
 };
 
-// Fills the domain with ions on a regular lattice (noise-free density) at
-// plasma.reference_density, each with statistical weight density / particles_per_cell.
+// Regular lattice (noise-free density); each ion has weight reference_density / particles_per_cell.
 std::vector<Particle> load_uniform_ions(const Grid2D& g, const PlasmaParameters& plasma, const IonLoading& loading);

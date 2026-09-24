@@ -33,7 +33,7 @@ double pressure_gradient(const Grid2D& g, const ScalarField& pressure, int compo
     }
 }
 
-} // namespace
+}
 
 VectorField curl_of_electric_field(const Grid2D& g, const VectorField& electric_field) {
     const auto Ex = component_of(electric_field, axis::x);

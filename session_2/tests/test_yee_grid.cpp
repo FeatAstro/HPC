@@ -56,7 +56,7 @@ void test_wrong_layout_is_detected() {
     std::cout << "test_wrong_layout_is_detected: passed\n";
 }
 
-} // namespace
+}
 
 int main() {
     test_staggered_gather_is_exact_for_linear_fields();

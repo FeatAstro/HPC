@@ -74,7 +74,7 @@ void test_waves_follow_the_dispersion_relation() {
     std::cout << "test_waves_follow_the_dispersion_relation: passed\n";
 }
 
-} // namespace
+}
 
 int main() {
     test_uniform_drift_is_an_equilibrium();

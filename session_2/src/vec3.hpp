@@ -7,7 +7,7 @@ inline constexpr int x = 0;
 inline constexpr int y = 1;
 inline constexpr int z = 2;
 inline constexpr int count = 3;
-} // namespace axis
+}
 
 struct Vec3 {
     double x = 0.0;

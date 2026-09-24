@@ -16,7 +16,6 @@ inline VectorField scaled(const VectorField& field, double factor) {
     return result;
 }
 
-// base + factor * increment
 inline VectorField added(const VectorField& base, double factor, const VectorField& increment) {
     VectorField result(base.size());
     for (std::size_t k = 0; k < base.size(); ++k) {

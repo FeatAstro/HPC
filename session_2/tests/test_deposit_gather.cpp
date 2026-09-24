@@ -1,8 +1,5 @@
-// Step 2 tests: bilinear deposit/gather correctness.
-//  1. weight conservation: total deposited weight on the grid == total particle weight
-//  2. exactness on linear fields: gather must reproduce a linear f(x,y) exactly
-//  3. consistency with Step 1: N=1 particle, uniform prescribed field -> same
-//     trajectory as the Step 1 Boris pusher test.
+// Step 2 tests: deposit conserves the total weight (any grid spacing), gather reproduces a
+// linear field exactly, and one particle on the grid follows the Step 1 trajectory.
 #include <cmath>
 #include <iostream>
 #include <random>
@@ -33,7 +30,7 @@ void test_weight_conservation() {
         p.w = 1.0;
         total_weight += p.w;
     }
-    // include an exact-corner and exact-edge particle
+    // particles exactly on the first and the last node
     particles.push_back(Particle{0.0, 0.0, Vec3{}, 1.0, 1.0, 1.0});
     particles.push_back(Particle{10.0, 10.0, Vec3{}, 1.0, 1.0, 1.0});
     total_weight += 2.0;
@@ -50,10 +47,8 @@ void test_weight_conservation() {
 }
 
 void test_nonunit_spacing() {
-    // dx = 0.5, dy = 4.0: domain x in [0,5], y in [0,20]
     Grid2D grid(11, 6, 0.5, 4.0, 0.0, 0.0);
 
-    // (a) weight conservation with non-unit spacing
     std::mt19937 rng(3);
     std::uniform_real_distribution<double> xdist(0.0, 5.0);
     std::uniform_real_distribution<double> ydist(0.0, 20.0);
@@ -72,8 +67,7 @@ void test_nonunit_spacing() {
     }
     check_close(deposited_weight, total_weight, 1e-9, "weight conservation, dx!=1");
 
-    // (b) exact node value and bulk velocity at a node
-    // two particles sitting exactly on node (2,2) = (1.0, 8.0), weights 1 and 3
+    // two particles exactly on node (2, 2), weights 1 and 3
     Particle a{1.0, 8.0, Vec3{1.0, 0.0, 0.0}, 1.0, 1.0, 1.0};
     Particle b{1.0, 8.0, Vec3{5.0, 0.0, 0.0}, 1.0, 1.0, 3.0};
     deposit_moments(grid, {a, b});
@@ -142,7 +136,7 @@ void test_consistency_with_step1() {
     std::cout << "test_consistency_with_step1: passed\n";
 }
 
-} // namespace
+}
 
 int main() {
     test_weight_conservation();

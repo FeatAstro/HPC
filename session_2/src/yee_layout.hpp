@@ -19,4 +19,4 @@ inline constexpr Staggering electric_field = {{{0.5, 0.0}, {0.0, 0.5}, {0.0, 0.0
 inline constexpr Staggering current_density = electric_field;
 inline constexpr Staggering magnetic_field = {{{0.0, 0.5}, {0.5, 0.0}, {0.5, 0.5}}};
 
-} // namespace yee
+}

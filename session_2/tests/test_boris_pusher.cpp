@@ -20,7 +20,7 @@ void check_close(double a, double b, double tol, const char* what) {
         std::exit(1);
     }
 }
-} // namespace
+}
 
 int main() {
     const double B0 = 1.0;
@@ -39,7 +39,7 @@ int main() {
     const double v0 = norm(p.v);
     const double omega_c = p.q * B0 / p.m;
     const double r_L = v0 / omega_c;
-    const double yc = y0 - r_L; // analytic guiding-center y (see derivation in plan)
+    const double yc = y0 - r_L; // q v x B points along -y at t = 0
 
     const double speed0 = norm(p.v);
 

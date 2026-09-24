@@ -28,7 +28,6 @@ struct Grid2D {
           magnetic_field(static_cast<std::size_t>(nx_) * ny_),
           current_density(static_cast<std::size_t>(nx_) * ny_) {}
 
-    // Indices wrap around, so neighbours of edge nodes are always valid.
     int index(int i, int j) const { return wrap_index(j, ny) * nx + wrap_index(i, nx); }
 
     double node_x(int i, double offset_in_cells = 0.0) const { return x0 + (i + offset_in_cells) * dx; }

@@ -82,7 +82,7 @@ void test_gather_is_periodic() {
     std::cout << "test_gather_is_periodic: passed\n";
 }
 
-} // namespace
+}
 
 int main() {
     test_index_wrapping();

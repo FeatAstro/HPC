@@ -40,5 +40,4 @@ struct WaveRunResult {
 double parallel_wave_frequency(const PlasmaParameters& plasma, double background_field, double wave_number,
                                WaveBranch branch);
 
-// Loads the ions, sets up the wave, runs the hybrid PIC loop and compares with theory.
 WaveRunResult run_parallel_wave(const WaveRunSettings& settings);

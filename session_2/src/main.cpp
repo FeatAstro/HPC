@@ -103,7 +103,7 @@ void run_hybrid_wave_demo() {
     std::cout << "\n";
 }
 
-} // namespace
+}
 
 int main() {
     std::cout << "kinetic_fisher: session 2 - hybrid-kinetic PIC (kinetic ions, fluid electrons)\n\n";

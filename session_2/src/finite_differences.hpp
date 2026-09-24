@@ -26,7 +26,6 @@ double backward_difference_y(const Grid2D& g, ValueAtNode value_at_node, int i, 
     return (value_at_node(g.index(i, j)) - value_at_node(g.index(i, j - 1))) / g.dy;
 }
 
-// Adapter so a difference can act on one component of a VectorField.
 inline auto component_of(const VectorField& field, int component) {
     return [&field, component](int node) { return field[node][component]; };
 }
