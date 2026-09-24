@@ -5,7 +5,7 @@ This is the particle side of a 2D PIC code: ions are macro-particles (Boris-push
 the deposited moments and the prescribed (not solved) fields.
 
 The self-consistent hybrid extension (Yee grid, Ampère + Ohm + Faraday, predictor-corrector loop,
-wave validation) lives in `../session_2_advanced/`, which is gitignored and not part of the submission.
+wave validation) lives in `../session_2_advanced/`, a separate project that goes beyond the session.
 
 ## Build & test
 
