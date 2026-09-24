@@ -5,7 +5,7 @@ Two C++ sessions, each a self-contained CMake project (C++, HDF5 available on th
 | Folder | Topic |
 | --- | --- |
 | [`session_1/`](session_1) | Finite-difference convergence study |
-| [`session_2/`](session_2) | Boris pusher and particle–mesh coupling (hybrid-kinetic PIC) |
+| [`session_2/`](session_2) | Boris pusher and particle–mesh coupling (PIC, prescribed fields) |
 
 ## session_1 — Finite-difference convergence
 
@@ -23,25 +23,14 @@ cd build && ./finite_difference_convergence    # writes results.h5 in the curren
 
 Then open `analysis.ipynb` (it reads `build/results.h5`).
 
-## session_2 — Hybrid-kinetic particle-in-cell
+## session_2 — Boris pusher and particle–mesh coupling
 
-A 2D hybrid-kinetic particle-in-cell code (ions as macro-particles, electrons as a massless fluid),
-following the course slides in `session_2/session_2.pdf`. The domain is periodic, in normalised units
-(`mu0 = e = m_i = n0 = B0 = 1`); every physical and numerical setting is a field of one parameter struct
-(`PlasmaParameters`, `IonLoading`, `WaveRunSettings`).
+The particle side of a 2D particle-in-cell code, following the course slides in `session_2/session_2.pdf`.
+The domain is periodic and the fields are prescribed (not solved yet).
 
 1. **Boris pusher, one particle**: tested against the exact gyration in a uniform magnetic field.
 2. **N particles and the mesh**: bilinear deposit of density and bulk velocity, bilinear gather of the
-   fields, same shape function both ways; weight conservation for any grid spacing.
-3. **Periodic boundaries and a Yee grid**: `E` and `j` on cell edges, `B` on cell faces, each component
-   interpolated from where it lives.
-4. **Field solver**: Ampère's law (no displacement current), generalized Ohm's law with the electron
-   fluid velocity `v_e = v_i - j/(ne)` and an isothermal electron pressure, Faraday's law advanced with
-   RK4. `div B` stays at round-off.
-5. **Full PIC loop** (predictor-corrector): moments, fields, gather, push.
-6. **Validation**: a uniform drift stays in equilibrium, and parallel ion-cyclotron and whistler waves
-   propagate at the frequency of the exact dispersion relation (about 1% agreement, energy conserved to
-   1e-5 of the wave energy).
+   fields, same shape function both ways; weight conservation for any grid spacing, periodic wrapping.
 
 ```sh
 cd session_2
@@ -50,5 +39,6 @@ ctest --test-dir build --output-on-failure     # run the tests
 ./build/kinetic_fisher                         # demo of the steps above
 ```
 
-`session_2/cpp_concepts.tex` (PDF included) explains the physics and the C++ of all the steps above
-(build with `latexmk -pdf cpp_concepts.tex`); `session_2/CLAUDE.md` summarizes the conventions.
+`session_2/cpp_concepts.tex` (PDF included) explains the physics and the C++ of both steps
+(build with `latexmk -pdf cpp_concepts.tex`), `tests_walkthrough.pdf` derives every test and
+`code_walkthrough.pdf` follows `main()` through each function; `session_2/CLAUDE.md` summarizes the conventions.

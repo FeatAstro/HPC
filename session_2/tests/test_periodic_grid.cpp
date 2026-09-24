@@ -63,20 +63,20 @@ void test_deposit_across_seam() {
 
 void test_gather_is_periodic() {
     Grid2D grid(16, 8, 0.5, 0.5);
-    grid.fill_field(grid.electric_field, yee::nodes, [&](double x, double y) {
+    grid.fill_field(grid.electric_field, [&](double x, double y) {
         return Vec3{std::sin(2.0 * std::numbers::pi * x / grid.length_x()),
                     std::cos(2.0 * std::numbers::pi * y / grid.length_y()), 1.0};
     });
 
     const double x = grid.length_x() - 0.15;
     const double y = 0.3;
-    const Vec3 inside = gather(grid.electric_field, yee::nodes, grid, x, y);
-    const Vec3 shifted = gather(grid.electric_field, yee::nodes, grid, x + grid.length_x(), y - grid.length_y());
+    const Vec3 inside = gather(grid.electric_field, grid, x, y);
+    const Vec3 shifted = gather(grid.electric_field, grid, x + grid.length_x(), y - grid.length_y());
 
     check_close(shifted.x, inside.x, 1e-12, "gather x-component periodic");
     check_close(shifted.y, inside.y, 1e-12, "gather y-component periodic");
 
-    const Vec3 at_seam = gather(grid.electric_field, yee::nodes, grid, grid.length_x() - 0.25, 0.0);
+    const Vec3 at_seam = gather(grid.electric_field, grid, grid.length_x() - 0.25, 0.0);
     const double mean_of_neighbours = 0.5 * (grid.electric_field[grid.index(15, 0)].x + grid.electric_field[grid.index(0, 0)].x);
     check_close(at_seam.x, mean_of_neighbours, 1e-12, "gather interpolates between last node and node 0");
     std::cout << "test_gather_is_periodic: passed\n";

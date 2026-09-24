@@ -94,7 +94,7 @@ void test_linear_field_exactness() {
     for (int trial = 0; trial < 200; ++trial) {
         const double x = pos_dist(rng);
         const double y = pos_dist(rng);
-        const Vec3 gathered = gather(grid.electric_field, yee::nodes, grid, x, y);
+        const Vec3 gathered = gather(grid.electric_field, grid, x, y);
         const double expected = a + b * x + c * y;
         check_close(gathered.x, expected, 1e-9, "linear field exactness");
     }

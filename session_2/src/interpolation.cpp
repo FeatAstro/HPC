@@ -3,9 +3,9 @@
 #include <algorithm>
 #include <cmath>
 
-CellWeights bilinear_weights(const Grid2D& g, double x, double y, CellOffset offset) {
-    const double cell_coordinate_x = (x - g.x0) / g.dx - offset.x;
-    const double cell_coordinate_y = (y - g.y0) / g.dy - offset.y;
+CellWeights bilinear_weights(const Grid2D& g, double x, double y) {
+    const double cell_coordinate_x = (x - g.x0) / g.dx;
+    const double cell_coordinate_y = (y - g.y0) / g.dy;
 
     const int i0 = static_cast<int>(std::floor(cell_coordinate_x));
     const int j0 = static_cast<int>(std::floor(cell_coordinate_y));
@@ -43,16 +43,9 @@ void deposit_moments(Grid2D& g, const std::vector<Particle>& particles) {
     }
 }
 
-Vec3 gather(const VectorField& field, const Staggering& staggering, const Grid2D& g, double x, double y) {
-    Vec3 result;
-    for (int component = 0; component < axis::count; ++component) {
-        const CellWeights cw = bilinear_weights(g, x, y, staggering[component]);
-        result[component] = weighted_sum(g, cw, [&](int node) { return field[node][component]; });
-    }
-    return result;
-}
-
-double gather_scalar(const ScalarField& field, const Grid2D& g, double x, double y) {
+Vec3 gather(const VectorField& field, const Grid2D& g, double x, double y) {
     const CellWeights cw = bilinear_weights(g, x, y);
-    return weighted_sum(g, cw, [&](int node) { return field[node]; });
+    Vec3 result;
+    for_each_corner(g, cw, [&](int node, double weight) { result += weight * field[node]; });
+    return result;
 }

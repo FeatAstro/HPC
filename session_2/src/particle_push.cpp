@@ -12,8 +12,8 @@ void drift_particles(std::vector<Particle>& particles, const Grid2D& g, double d
 
 void accelerate_particles(std::vector<Particle>& particles, const Grid2D& g, double dt) {
     for (Particle& p : particles) {
-        const Vec3 E = gather(g.electric_field, yee::electric_field, g, p.x, p.y);
-        const Vec3 B = gather(g.magnetic_field, yee::magnetic_field, g, p.x, p.y);
+        const Vec3 E = gather(g.electric_field, g, p.x, p.y);
+        const Vec3 B = gather(g.magnetic_field, g, p.x, p.y);
         boris_push(p, E, B, dt);
     }
 }

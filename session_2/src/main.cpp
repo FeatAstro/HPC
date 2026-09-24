@@ -3,12 +3,10 @@
 #include <numbers>
 #include <iostream>
 #include <random>
-#include <utility>
 #include <vector>
 
 #include "grid.hpp"
 #include "interpolation.hpp"
-#include "linear_wave.hpp"
 #include "particle.hpp"
 #include "step1_single_particle.hpp"
 #include "step2_pic_loop.hpp"
@@ -84,31 +82,11 @@ void run_step2_demo() {
     std::cout << "  weight recovered on grid = " << deposited_weight << "\n\n";
 }
 
-void run_hybrid_wave_demo() {
-    std::cout << "--- Hybrid PIC: parallel waves (kinetic ions, fluid electrons) ---\n";
-
-    const std::pair<WaveBranch, const char*> branches[] = {{WaveBranch::ion_cyclotron, "ion-cyclotron"},
-                                                           {WaveBranch::whistler, "whistler"}};
-    for (const auto& [branch, name] : branches) {
-        WaveRunSettings settings;
-        settings.wave.branch = branch;
-        const WaveRunResult result = run_parallel_wave(settings);
-
-        std::cout << std::fixed << std::setprecision(4);
-        std::cout << "  " << name << " branch: theoretical frequency = " << result.theoretical_frequency
-                  << ", measured = " << result.measured_frequency << ", amplitude after one period = "
-                  << result.amplitude_ratio << " x initial, energy change = " << std::scientific
-                  << std::setprecision(2) << result.relative_energy_change << " x wave energy\n";
-    }
-    std::cout << "\n";
-}
-
 }
 
 int main() {
-    std::cout << "kinetic_fisher: session 2 - hybrid-kinetic PIC (kinetic ions, fluid electrons)\n\n";
+    std::cout << "kinetic_fisher: session 2 - Boris pusher and particle-mesh coupling\n\n";
     run_step1_demo();
     run_step2_demo();
-    run_hybrid_wave_demo();
     return 0;
 }

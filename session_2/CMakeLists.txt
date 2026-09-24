@@ -19,11 +19,6 @@ add_library(pic_core STATIC
     src/interpolation.cpp
     src/step2_pic_loop.cpp
     src/particle_push.cpp
-    src/particle_loading.cpp
-    src/field_solver.cpp
-    src/pic_loop.cpp
-    src/diagnostics.cpp
-    src/linear_wave.cpp
 )
 target_compile_options(pic_core PRIVATE -Wall -Wextra)
 target_include_directories(pic_core PUBLIC src)
@@ -44,7 +39,7 @@ add_executable(test_deposit_gather tests/test_deposit_gather.cpp)
 target_link_libraries(test_deposit_gather PRIVATE pic_core)
 add_test(NAME test_deposit_gather COMMAND test_deposit_gather)
 
-foreach(test_name test_periodic_grid test_yee_grid test_field_solver test_hybrid_waves)
+foreach(test_name test_periodic_grid)
     add_executable(${test_name} tests/${test_name}.cpp)
     target_compile_options(${test_name} PRIVATE -Wall -Wextra)
     target_link_libraries(${test_name} PRIVATE pic_core)
