@@ -16,7 +16,7 @@ __pycache__/
 docs/
 
 # Generated figures
-plots/figures/
+# plots/figures/
 
 # Don't want to appear on GitHub for now
 bench/
