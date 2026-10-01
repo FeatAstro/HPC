@@ -1,14 +1,15 @@
 # HPC Master Class — Projects
 
-Two C++ sessions (plus an extension of session 2), each a self-contained CMake project (C++, HDF5 available on the system).
+Two C++ projects from the course, each a self-contained CMake project.
 
 | Folder | Topic |
 | --- | --- |
-| [`session_1/`](session_1) | Finite-difference convergence study |
-| [`session_2/`](session_2) | Boris pusher and particle–mesh coupling (PIC, prescribed fields) |
-| [`session_2_advanced/`](session_2_advanced) | Extension of session 2: self-consistent hybrid-kinetic PIC (fields solved) |
+| [`FDC/`](FDC) | Finite-difference convergence study |
+| [`PIC/`](PIC) | 1D hybrid particle-in-cell code, built and tested step by step |
 
-## session_1 — Finite-difference convergence
+The course slides and LaTeX notes are kept locally and are not in the repository.
+
+## FDC — Finite-difference convergence
 
 Approximates the derivative of `sin(x)` at `x = 1` with a first-order (forward) and a
 second-order (centred) finite-difference scheme, sweeping the step `h` from `1e-1` down to
@@ -17,46 +18,51 @@ second-order (centred) finite-difference scheme, sweeping the step `h` from `1e-
 slopes and the round-off floor at small `h`.
 
 ```sh
-cd session_1
+cd FDC
 cmake -S . -B build && cmake --build build
 cd build && ./finite_difference_convergence    # writes results.h5 in the current folder
 ```
 
-Then open `analysis.ipynb` (it reads `build/results.h5`).
+Then open `analysis.ipynb` (it reads `build/results.h5`). Needs HDF5.
 
-## session_2 — Boris pusher and particle–mesh coupling
+## PIC — Hybrid particle-in-cell code
 
-The particle side of a 2D particle-in-cell code, following the course slides in `session_2/session_2.pdf`.
-The domain is periodic and the fields are prescribed (not solved yet).
+A 1D hybrid-kinetic plasma code: the ions are macro-particles, the electrons a massless isothermal
+fluid. Positions are 1D and velocities 3D (1D3V), the domain is periodic, and the units are
+normalised (`μ0 = e = m_i = 1`). The physics is in C++; it is exposed to Python with pybind11, and
+every test and figure is written in Python.
 
-1. **Boris pusher, one particle**: tested against the exact gyration in a uniform magnetic field.
-2. **N particles and the mesh**: bilinear deposit of density and bulk velocity, bilinear gather of the
-   fields, same shape function both ways; weight conservation for any grid spacing, periodic wrapping.
+### What is implemented
+
+| Step | Content | Checked by |
+| --- | --- | --- |
+| 1 | Boris pusher, one particle in uniform fields | Larmor radius against mass, rotation direction, error ∝ dt², E×B drift |
+| 2a | A population of particles (one array per quantity), periodic domain | energy and temperature conserved in a magnetic field, periodic wrap |
+| 2b | Periodic grid, order-1 deposit of the moments and gather of the fields | hat-function deposit, linear gather, conservation of weight, momentum and energy |
+| 2c | Maxwellian loading from user profiles n(x), u(x), T(x) | error of the deposited moments ∝ 1/√N |
+| 3a | Yee layout: `Bx, Ey, Ez` on the nodes, `By, Bz, Ex` at the cell centres | derivatives and averages second order in dx |
+| 3b | Ampère's law and the generalised Ohm's law (Hall, electron pressure, resistivity, hyper-resistivity) | uniform plasma gives `E = −u × B`; error ∝ dx² against an exact solution |
+| 3c | Faraday's law with the iterated Crank–Nicolson scheme, ions held fixed | whistler frequency `ω = k² B / n`, resistive decay rate |
+
+Not done yet: the full loop, where the particles and the fields advance together.
+
+### Build, test, plot
+
+Needs CMake, a C++17 compiler, Python 3 with numpy and matplotlib, and pybind11 and ddt
+(on Debian/Ubuntu: `sudo apt install pybind11-dev python3-pybind11 python3-ddt`).
 
 ```sh
-cd session_2
+cd PIC
 cmake -S . -B build && cmake --build build
-ctest --test-dir build --output-on-failure     # run the tests
-./build/kinetic_fisher                         # demo of the steps above
+python3 -m unittest discover -s tests -v       # or: ctest --test-dir build --output-on-failure
+python3 plots/plot_step1_boris.py              # one script per step, figures go to plots/figures/
 ```
 
-`session_2/CLAUDE.md` summarizes the conventions. The course slides and the LaTeX notes
-(`cpp_concepts`, `tests_walkthrough`, `code_walkthrough`) are kept locally and are not in the repository
-(`*.pdf` and `*.tex` are gitignored).
+### Layout
 
-## session_2_advanced — Hybrid-kinetic particle-in-cell (extension)
-
-Goes beyond the session: the same Steps 1–2, plus the field equations of the slides, so that the
-particles act back on the fields. Ions are kinetic macro-particles, electrons a massless fluid.
-
-- **Yee grid**: `E` and `j` on cell edges, `B` on cell faces, each component interpolated from where it lives.
-- **Field solver**: Ampère's law (no displacement current), generalized Ohm's law with
-  `v_e = v_i - j/(ne)` and an isothermal electron pressure, Faraday's law advanced with RK4; `div B`
-  stays at round-off.
-- **Full PIC loop** (predictor-corrector): deposit moments, solve fields, gather, push.
-- **Validation**: a uniform drift stays in equilibrium, and parallel ion-cyclotron and whistler waves
-  propagate at the frequency of the exact dispersion relation (about 1% agreement, energy conserved to
-  1e-5 of the wave energy).
-
-Normalised units (`mu0 = e = m_i = n0 = B0 = 1`); settings live in the structs `PlasmaParameters`,
-`IonLoading`, `WaveRunSettings`. Build, test and run as for session_2 (inside `session_2_advanced/`).
+- `src/` — the C++ code: `boris` (pusher), `population` (particles, deposit, push), `grid` (Yee grid,
+  shape function), `loading` (Maxwellian loader), `field_solver` (Ampère, Ohm, Faraday).
+- `python/bindings.cpp` — the Python module `pic`.
+- `tests/` — the tests, with their shared helpers in `common.py`.
+- `plots/` — one figure script per step: what the code gives against what is expected.
+- [`TESTS.md`](PIC/TESTS.md) — what each test checks and why.

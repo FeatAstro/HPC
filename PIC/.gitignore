@@ -1,0 +1,25 @@
+build-*/
+build/
+
+# LaTeX build files
+*.aux
+*.log
+*.toc
+*.out
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+
+__pycache__/
+
+# Slides and LaTeX notes, kept locally only
+docs/
+
+# Generated figures
+plots/figures/
+
+# Don't want to appear on GitHub for now
+bench/
+old/
+instructions.txt
+CLAUDE.md
