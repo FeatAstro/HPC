@@ -9,6 +9,7 @@ build/
 *.fls
 *.fdb_latexmk
 *.synctex.gz
+*.md
 
 __pycache__/
 
@@ -26,3 +27,4 @@ CLAUDE.md
 tests/
 plots/
 python/
+
