@@ -1,3 +1,4 @@
 # Documents are kept locally, not in the repository
 *.pdf
 *.tex
+*.md
