@@ -29,8 +29,10 @@ Then open `analysis.ipynb` (it reads `build/results.h5`). Needs HDF5.
 
 A 1D hybrid-kinetic plasma code: the ions are macro-particles, the electrons a massless isothermal
 fluid. Positions are 1D and velocities 3D (1D3V), the domain is periodic, and the units are
-normalised (`μ0 = e = m_i = 1`). The physics is in C++; it is exposed to Python with pybind11, and
-every test and figure is written in Python.
+normalised (`μ0 = e = m_i = 1`).
+
+The repository holds the C++ physics (`PIC/src/`). The code is exposed to Python with pybind11 and
+tested from Python; the bindings, the tests and the figure scripts are kept locally for now.
 
 ### What is implemented
 
@@ -46,23 +48,17 @@ every test and figure is written in Python.
 
 Not done yet: the full loop, where the particles and the fields advance together.
 
-### Build, test, plot
+### Building
 
-Needs CMake, a C++17 compiler, Python 3 with numpy and matplotlib, and pybind11 and ddt
-(on Debian/Ubuntu: `sudo apt install pybind11-dev python3-pybind11 python3-ddt`).
-
-```sh
-cd PIC
-cmake -S . -B build && cmake --build build
-python3 -m unittest discover -s tests -v       # or: ctest --test-dir build --output-on-failure
-python3 plots/plot_step1_boris.py              # one script per step, figures go to plots/figures/
-```
+`CMakeLists.txt` builds the C++ library `pic_core` and the Python module `pic`. The module needs
+`python/bindings.cpp`, which is not in the repository yet, so the project does not build from a
+fresh clone for now. The sources in `src/` are plain C++17 with no dependency.
 
 ### Layout
 
-- `src/` — the C++ code: `boris` (pusher), `population` (particles, deposit, push), `grid` (Yee grid,
-  shape function), `loading` (Maxwellian loader), `field_solver` (Ampère, Ohm, Faraday).
-- `python/bindings.cpp` — the Python module `pic`.
-- `tests/` — the tests, with their shared helpers in `common.py`.
-- `plots/` — one figure script per step: what the code gives against what is expected.
-- [`TESTS.md`](PIC/TESTS.md) — what each test checks and why.
+- `src/vec3.hpp` — 3D vector and its operators.
+- `src/boris.{hpp,cpp}` — Boris pusher for one particle.
+- `src/population.{hpp,cpp}` — a population of particles: push, deposit of the moments, temperature.
+- `src/grid.{hpp,cpp}` — periodic Yee grid, derivatives and averages, shape function, gather.
+- `src/loading.{hpp,cpp}` — Maxwellian loader from n(x), u(x), T(x) profiles.
+- `src/field_solver.{hpp,cpp}` — Ampère, Ohm and Faraday (iterated Crank–Nicolson).
