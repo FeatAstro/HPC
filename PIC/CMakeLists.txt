@@ -12,9 +12,6 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
 endif()
 
-find_package(Python COMPONENTS Interpreter Development REQUIRED)
-find_package(pybind11 CONFIG REQUIRED)
-
 # The physics, plain C++ with no Python in it. Position-independent code because
 # it is linked into the Python module, which is a shared library.
 add_library(pic_core STATIC
@@ -44,11 +41,17 @@ add_executable(hybrid src/main.cpp)
 target_link_libraries(hybrid PRIVATE pic_core)
 target_compile_options(hybrid PRIVATE -Wall -Wextra)
 
-# The Python module `pic`, built into build/ (tests/test_pic.py looks for it there).
-pybind11_add_module(pic python/bindings.cpp)
-target_link_libraries(pic PRIVATE pic_core)
+# The Python module `pic` and the tests are kept locally (not on GitHub): build them only if they are here.
+if(EXISTS ${CMAKE_SOURCE_DIR}/python/bindings.cpp)
+    find_package(Python COMPONENTS Interpreter Development REQUIRED)
+    find_package(pybind11 CONFIG REQUIRED)
 
-# All tests are in Python: `ctest` just runs them.
-enable_testing()
-add_test(NAME python_tests
-         COMMAND ${Python_EXECUTABLE} -m unittest discover -s ${CMAKE_SOURCE_DIR}/tests -v)
+    # The Python module `pic`, built into build/ (tests/common.py looks for it there).
+    pybind11_add_module(pic python/bindings.cpp)
+    target_link_libraries(pic PRIVATE pic_core)
+
+    # All tests are in Python: `ctest` just runs them.
+    enable_testing()
+    add_test(NAME python_tests
+             COMMAND ${Python_EXECUTABLE} -m unittest discover -s ${CMAKE_SOURCE_DIR}/tests -v)
+endif()
