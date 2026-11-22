@@ -1,5 +1,14 @@
+# Only PIC/ and Hydro/ are in the repository; the rest is kept locally.
+FDC/
+.vscode/
+session_4.md
+Hydro/old/
+
 # Documents are kept locally, not in the repository
 *.pdf
 *.tex
 *.md
 !README.md
+
+__pycache__/
+build/
