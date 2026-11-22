@@ -1,56 +1,41 @@
 #pragma once
 
-#include <cstddef>
-#include <string>
+#include <functional>
 #include <vector>
 
 #include "grid.hpp"
-#include "vec3.hpp"
 
-// One ion species and its macro-particles, stored as one array per quantity
-// (structure of arrays): particle i is (x[i], vx[i], vy[i], vz[i], w[i]).
+// A population: one species of ions (here protons) as macro-particles, one array per quantity:
+// particle i is (x[i], vx[i], vy[i], vz[i], w[i]).
+// Position in 1D, velocity in 3D because v x B needs all three components.
 struct Population {
-    std::string name;
     double q = 1.0;
     double m = 1.0;
 
     std::vector<double> x;
     std::vector<double> vx, vy, vz;
     std::vector<double> w;  // statistical weight: the density this macro-particle deposits
+};
 
-    // Moments on the grid nodes, filled by deposit() (slide 4: n_i = sum_p S(x_p - x_i) w_p).
+// The ion fluid seen from the grid, on the nodes (slide 4: n_i = sum_p S(x_p - x_i) w_p).
+struct Moments {
     ScalarField density;
-    VectorField flux;                    // sum_p S w_p v_p
-    ScalarField kinetic_energy_density;  // sum_p S w_p m |v_p|^2 / 2
-
-    Population(const std::string& name, double q, double m) : name(name), q(q), m(m) {}
-
-    std::size_t size() const { return x.size(); }
-
-    // Boris step (slide 7) with E and B gathered at the mid-step position.
-    // Also wraps x periodically into [0, grid.length()).
-    void push(const Grid& grid, const Fields& fields, double dt);
-
-    void deposit(const Grid& grid);
-
-    // From the deposited moments: T = (2/3) (kinetic energy density / n - m |u|^2 / 2), u = flux / n.
-    // Zero on a node without particles.
-    ScalarField temperature() const;
-
-    void check_sizes() const;
-    void check_deposited_on(const Grid& grid) const;
+    VectorField bulk_velocity;  // u = sum_p S w_p v_p / n
+    ScalarField temperature;    // T = (m / 3) (sum_p S w_p |v_p|^2 / n - |u|^2): the spread of v around u
 };
 
-// Sums over all populations (slide 5).
-ScalarField total_density(const std::vector<const Population*>& populations, const Grid& grid);
-VectorField bulk_velocity(const std::vector<const Population*>& populations, const Grid& grid);
+// A profile is any function of x given by the user: a C++ function, a lambda, or a Python function.
+using Profile = std::function<double(double)>;
 
-// Totals weighted by w; index 0 is the initial state.
-struct PopulationHistory {
-    std::vector<double> t;
-    std::vector<double> kinetic_energy;
-    std::vector<double> mean_vx, mean_vy, mean_vz;
-};
+// Protons (q = m = 1) loaded from profiles of density n(x), bulk velocity (ux, uy, uz)(x) and
+// temperature T(x). In every cell, particles_per_cell protons at random positions; each one takes
+// the profiles at its own position: w = n(x) / particles_per_cell, and each velocity component is
+// u(x) + sqrt(T(x) / m) times a standard normal number (a Maxwellian). The same seed gives the
+// same protons.
+Population maxwellian_protons(const Grid& grid, int particles_per_cell, const Profile& density, const Profile& ux,
+                        const Profile& uy, const Profile& uz, const Profile& temperature, unsigned seed);
 
-PopulationHistory run_population(Population& population, const Grid& grid, const Fields& fields,
-                                 double dt, int n_steps);
+// Boris step (slide 7), with E and B taken at the mid-step position; x stays in [0, L).
+void push(Population& ions, const Fields& fields, const Grid& grid, double dt);
+
+Moments deposit(const Population& ions, const Grid& grid);

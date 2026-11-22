@@ -1,53 +1,35 @@
 #include "grid.hpp"
 
-#include <cstddef>
-#include <stdexcept>
-
-Grid::Grid(int nx, double dx) : nx(nx), dx(dx) {
-    if (nx < 2 || dx <= 0.0) {
-        throw std::invalid_argument("Grid needs nx >= 2 and dx > 0");
-    }
-}
-
-// Cell centre i lies between node i and node i + 1; node i lies between cell centres i - 1 and i.
-// The neighbour beyond either end of the array is the one at the other end (periodic).
-
-ScalarField derivative_at_cell_centres(const ScalarField& node_values, const Grid& grid) {
-    const std::size_t n = node_values.size();
-    ScalarField derivative(n);
-    for (std::size_t i = 0; i < n; ++i) {
-        const std::size_t next = (i + 1 == n) ? 0 : i + 1;
-        derivative[i] = (node_values[next] - node_values[i]) / grid.dx;
+// Cell centre i is between node i and node i + 1.
+ScalarField derivative_at_cell_centres(const ScalarField& on_nodes, const Grid& grid) {
+    ScalarField derivative(grid.nx);
+    for (int i = 0; i < grid.nx; ++i) {
+        derivative[i] = (on_nodes[next_point(i, grid)] - on_nodes[i]) / grid.dx;
     }
     return derivative;
 }
 
-ScalarField derivative_at_nodes(const ScalarField& cell_centre_values, const Grid& grid) {
-    const std::size_t n = cell_centre_values.size();
-    ScalarField derivative(n);
-    for (std::size_t i = 0; i < n; ++i) {
-        const std::size_t previous = (i == 0) ? n - 1 : i - 1;
-        derivative[i] = (cell_centre_values[i] - cell_centre_values[previous]) / grid.dx;
+// Node i is between cell centre i - 1 and cell centre i.
+ScalarField derivative_at_nodes(const ScalarField& on_cell_centres, const Grid& grid) {
+    ScalarField derivative(grid.nx);
+    for (int i = 0; i < grid.nx; ++i) {
+        derivative[i] = (on_cell_centres[i] - on_cell_centres[previous_point(i, grid)]) / grid.dx;
     }
     return derivative;
 }
 
-ScalarField average_at_cell_centres(const ScalarField& node_values) {
-    const std::size_t n = node_values.size();
-    ScalarField average(n);
-    for (std::size_t i = 0; i < n; ++i) {
-        const std::size_t next = (i + 1 == n) ? 0 : i + 1;
-        average[i] = 0.5 * (node_values[i] + node_values[next]);
+ScalarField average_at_cell_centres(const ScalarField& on_nodes, const Grid& grid) {
+    ScalarField average(grid.nx);
+    for (int i = 0; i < grid.nx; ++i) {
+        average[i] = 0.5 * (on_nodes[i] + on_nodes[next_point(i, grid)]);
     }
     return average;
 }
 
-ScalarField average_at_nodes(const ScalarField& cell_centre_values) {
-    const std::size_t n = cell_centre_values.size();
-    ScalarField average(n);
-    for (std::size_t i = 0; i < n; ++i) {
-        const std::size_t previous = (i == 0) ? n - 1 : i - 1;
-        average[i] = 0.5 * (cell_centre_values[previous] + cell_centre_values[i]);
+ScalarField average_at_nodes(const ScalarField& on_cell_centres, const Grid& grid) {
+    ScalarField average(grid.nx);
+    for (int i = 0; i < grid.nx; ++i) {
+        average[i] = 0.5 * (on_cell_centres[previous_point(i, grid)] + on_cell_centres[i]);
     }
     return average;
 }

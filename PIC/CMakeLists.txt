@@ -18,14 +18,18 @@ find_package(pybind11 CONFIG REQUIRED)
 # The physics, plain C++ with no Python in it. Position-independent code because
 # it is linked into the Python module, which is a shared library.
 add_library(pic_core STATIC
-    src/boris.cpp
     src/field_solver.cpp
     src/grid.cpp
-    src/loading.cpp
+    src/hybrid.cpp
+    src/initial_conditions.cpp
     src/population.cpp
 )
 target_include_directories(pic_core PUBLIC src)
 target_compile_options(pic_core PRIVATE -Wall -Wextra)
+# OpenMP: the #pragma omp lines of push and deposit share the particles between the cores.
+# The number of threads is set at run time: OMP_NUM_THREADS=4 ./hybrid timing
+find_package(OpenMP REQUIRED)
+target_link_libraries(pic_core PUBLIC OpenMP::OpenMP_CXX)
 set_target_properties(pic_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 # cmake -S . -B build -DPIC_NATIVE=ON: use every vector instruction of this CPU
@@ -35,7 +39,12 @@ if(PIC_NATIVE)
     target_compile_options(pic_core PUBLIC -march=native)
 endif()
 
-# The Python module `pic`, built into build/ (tests/pic_path.py looks for it there).
+# The program: ./hybrid <case> runs one of the initial conditions and writes <case>.csv.
+add_executable(hybrid src/main.cpp)
+target_link_libraries(hybrid PRIVATE pic_core)
+target_compile_options(hybrid PRIVATE -Wall -Wextra)
+
+# The Python module `pic`, built into build/ (tests/test_pic.py looks for it there).
 pybind11_add_module(pic python/bindings.cpp)
 target_link_libraries(pic PRIVATE pic_core)
 

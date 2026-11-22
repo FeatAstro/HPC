@@ -16,15 +16,11 @@ __pycache__/
 # Slides and LaTeX notes, kept locally only
 docs/
 
-# Generated figures
-# plots/figures/
-
 # Don't want to appear on GitHub for now
 bench/
 old/
 instructions.txt
 CLAUDE.md
 tests/
-plots/
 python/
 

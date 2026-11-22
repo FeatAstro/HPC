@@ -3,103 +3,75 @@
 #include <cmath>
 #include <vector>
 
-#include "vec3.hpp"
-
-// Yee layout in 1D: a quantity lives either on the nodes, x_i = i dx, or at the cell centres,
-// x_i = (i + 1/2) dx. A derivative taken from one set of points is centred on the other.
-enum class Centering { node, cell_centre };
-
-// Periodic 1D grid: nx cells of size dx, node nx is node 0 again, so the domain is [0, nx dx).
+// Periodic 1D grid: nx cells of size dx, so the domain is [0, nx dx).
+// Yee layout: a quantity lives either on the nodes, x_i = i dx, or at the cell centres,
+// x_i = (i + 1/2) dx. Cell centre i lies between node i and node i + 1.
 struct Grid {
     int nx;
     double dx;
 
-    Grid(int nx, double dx);
-
     double length() const { return nx * dx; }
-    double node_position(int i) const { return i * dx; }
-    double cell_centre_position(int i) const { return (i + 0.5) * dx; }
 };
 
-// One value per node (or per cell centre).
+// One value per node, or one per cell centre.
 using ScalarField = std::vector<double>;
 
-// One value per node (or per cell centre) for each component.
 struct VectorField {
     ScalarField x, y, z;
-    Centering x_centering = Centering::node;
-    Centering y_centering = Centering::node;
-    Centering z_centering = Centering::node;
 
     VectorField() = default;
-    explicit VectorField(const Grid& grid) : x(grid.nx, 0.0), y(grid.nx, 0.0), z(grid.nx, 0.0) {}
-    VectorField(const Grid& grid, Centering x_centering, Centering y_centering, Centering z_centering)
-        : x(grid.nx, 0.0), y(grid.nx, 0.0), z(grid.nx, 0.0),
-          x_centering(x_centering), y_centering(y_centering), z_centering(z_centering) {}
+    VectorField(const Grid& grid) : x(grid.nx, 0.0), y(grid.nx, 0.0), z(grid.nx, 0.0) {}
 };
 
-// Yee layout: Bx, Ey, Ez on the nodes (with the moments); By, Bz, Ex at the cell centres.
-// The current j = curl B lives where E does.
-inline VectorField electric_field_layout(const Grid& grid) {
-    return VectorField(grid, Centering::cell_centre, Centering::node, Centering::node);
-}
-
-inline VectorField magnetic_field_layout(const Grid& grid) {
-    return VectorField(grid, Centering::node, Centering::cell_centre, Centering::cell_centre);
-}
-
+// Bx, Ey, Ez live on the nodes (with the ion moments); Ex, By, Bz at the cell centres.
 struct Fields {
     VectorField E, B;
-
-    explicit Fields(const Grid& grid) : E(electric_field_layout(grid)), B(magnetic_field_layout(grid)) {}
 };
 
-// Centred differences and averages between the two sets of points, second order in dx.
-ScalarField derivative_at_cell_centres(const ScalarField& node_values, const Grid& grid);
-ScalarField derivative_at_nodes(const ScalarField& cell_centre_values, const Grid& grid);
-ScalarField average_at_cell_centres(const ScalarField& node_values);
-ScalarField average_at_nodes(const ScalarField& cell_centre_values);
+// The grid repeats itself: point -1 is point nx - 1, and point nx is point 0.
+inline int periodic_index(int i, const Grid& grid) {
+    if (i < 0) return i + grid.nx;
+    if (i >= grid.nx) return i - grid.nx;
+    return i;
+}
 
-// Order-1 shape function (slides 4-5): a particle between two points shares itself between them,
-// linearly in its distance to each. The same weights are used to deposit and to gather.
+inline int next_point(int i, const Grid& grid) { return periodic_index(i + 1, grid); }
+inline int previous_point(int i, const Grid& grid) { return periodic_index(i - 1, grid); }
+
+// From the nodes to the cell centres and back; centred, so second order in dx.
+ScalarField derivative_at_cell_centres(const ScalarField& on_nodes, const Grid& grid);
+ScalarField derivative_at_nodes(const ScalarField& on_cell_centres, const Grid& grid);
+ScalarField average_at_cell_centres(const ScalarField& on_nodes, const Grid& grid);
+ScalarField average_at_nodes(const ScalarField& on_cell_centres, const Grid& grid);
+
+// Order-1 shape function (slides 4-5): a particle between two grid points shares itself between
+// them, in proportion to how close it is to each. The same weights deposit and gather.
 struct ShapeWeights {
     int left_point, right_point;
     double left_weight, right_weight;
 };
 
-// x must be in [0, grid.length()).
-inline ShapeWeights shape_weights(const Grid& grid, double x, Centering centering = Centering::node) {
-    const double half_cell_shift = (centering == Centering::cell_centre) ? 0.5 : 0.0;
-    const double position_in_cells = x / grid.dx - half_cell_shift;
-    int left_point = static_cast<int>(std::floor(position_in_cells));
-    const double right_weight = position_in_cells - left_point;
-    if (left_point < 0) left_point += grid.nx;         // left of the first cell centre
-    if (left_point >= grid.nx) left_point -= grid.nx;  // x just below L can round to exactly nx cells
-    const int right_point = (left_point + 1 == grid.nx) ? 0 : left_point + 1;
-    return {left_point, right_point, 1.0 - right_weight, right_weight};
+// distance_in_cells: how many cells the particle is to the right of point 0.
+inline ShapeWeights shape_weights(double distance_in_cells, const Grid& grid) {
+    // -1 left of the first cell centre; nx when x is just below L and the division rounds up.
+    const int cells_passed = int(std::floor(distance_in_cells));
+    const double distance_from_left_point = distance_in_cells - cells_passed;  // in [0, 1)
+
+    const int left_point = periodic_index(cells_passed, grid);
+    return {left_point, next_point(left_point, grid), 1.0 - distance_from_left_point, distance_from_left_point};
 }
 
-// The weights of one particle for both centerings.
-struct ParticleShape {
-    ShapeWeights on_nodes, on_cell_centres;
+// x must be in [0, L).
+inline ShapeWeights weights_on_nodes(double x, const Grid& grid) {
+    return shape_weights(x / grid.dx, grid);
+}
 
-    const ShapeWeights& on(Centering centering) const {
-        return (centering == Centering::node) ? on_nodes : on_cell_centres;
-    }
-};
-
-inline ParticleShape particle_shape(const Grid& grid, double x) {
-    return {shape_weights(grid, x, Centering::node), shape_weights(grid, x, Centering::cell_centre)};
+inline ShapeWeights weights_on_cell_centres(double x, const Grid& grid) {
+    return shape_weights(x / grid.dx - 0.5, grid);
 }
 
 inline double interpolate(const ScalarField& values, const ShapeWeights& shape) {
     return shape.left_weight * values[shape.left_point] + shape.right_weight * values[shape.right_point];
-}
-
-inline Vec3 gather(const VectorField& field, const ParticleShape& shape) {
-    return {interpolate(field.x, shape.on(field.x_centering)),
-            interpolate(field.y, shape.on(field.y_centering)),
-            interpolate(field.z, shape.on(field.z_centering))};
 }
 
 inline void deposit_onto(ScalarField& moment, const ShapeWeights& shape, double amount) {
