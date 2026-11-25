@@ -4,11 +4,6 @@ FDC/
 session_4.md
 Hydro/old/
 
-# Hydro: local test and reference files
-Hydro/gudanov2d_professor.py
-Hydro/exact_riemann.py
-Hydro/sod_test.py
-Hydro/sod_test.png
 
 # Documents are kept locally, not in the repository
 *.pdf
