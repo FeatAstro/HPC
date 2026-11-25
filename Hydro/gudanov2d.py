@@ -10,7 +10,7 @@ PRESSURE_FLOOR = 1e-12
 MIN_SPEED_GAP = 1e-12
 
 
-# ---------- Stage 1: physical model, W = (rho, u, v, P) <-> U = (rho, rho u, rho v, E) 
+# ---------- physical model, W = (rho, u, v, P) <-> U = (rho, rho u, rho v, E) 
 
 def sound_speed(gamma, P, rho):
     return np.sqrt(gamma * P / rho)
@@ -36,7 +36,7 @@ def cons_to_prim(U, gamma):
     return np.array([rho, u, v, P])
 
 
-# ---------- Stage 2: 1-D Riemann problem at a face, HLL and HLLC 
+# ---------- 1-D Riemann problem at a face, HLL and HLLC 
 # idir = 0 for an x-face (normal velocity u), idir = 1 for a y-face (normal velocity v).
 
 def normal_velocity(W, idir):
@@ -107,7 +107,7 @@ def hllc_star_state(W, U, S, S_star, idir):
     """Conserved state between the outer wave S and the contact S_star.
 
     Every component, energy included, follows from the Rankine-Hugoniot jump across the wave S
-    (Toro 10.39); this keeps the energy flux through a contact at rest exactly zero.
+    (Toro) --> keeps the energy flux through a contact at rest exactly zero.
     """
     rho, u, v, P = W
     un = normal_velocity(W, idir)
@@ -143,7 +143,7 @@ def hllc_flux(W_L, W_R, gamma, idir):
     return F
 
 
-# ---------- Stage 3: finite volumes, ghost cells and MUSCL reconstruction
+# ---------- finite volumes, ghost cells and MUSCL reconstruction
 
 def array_axis(idir):
     """Axis of the (variable, y, x) arrays along which idir runs."""
@@ -152,12 +152,16 @@ def array_axis(idir):
     return 1
 
 
-def fill_outflow_ghosts(U):
+def fill_outflow_ghosts_x(U):
     """The ghost cells copy the nearest domain cell, so waves leave freely."""
     U[:, :, 0] = U[:, :, NG]
     U[:, :, 1] = U[:, :, NG]
     U[:, :, -1] = U[:, :, -1 - NG]
     U[:, :, -2] = U[:, :, -1 - NG]
+    return U
+
+
+def fill_outflow_ghosts_y(U):
     U[:, 0, :] = U[:, NG, :]
     U[:, 1, :] = U[:, NG, :]
     U[:, -1, :] = U[:, -1 - NG, :]
@@ -165,22 +169,31 @@ def fill_outflow_ghosts(U):
     return U
 
 
-def fill_periodic_ghosts(U):
+def fill_periodic_ghosts_x(U):
     """Gas leaving through one edge comes back through the opposite edge."""
     U[:, :, :NG] = U[:, :, -2 * NG:-NG]
     U[:, :, -NG:] = U[:, :, NG:2 * NG]
+    return U
+
+
+def fill_periodic_ghosts_y(U):
     U[:, :NG, :] = U[:, -2 * NG:-NG, :]
     U[:, -NG:, :] = U[:, NG:2 * NG, :]
     return U
 
 
-def apply_bcs(U, boundary):
-    """Fill the NG = 2 ghost layers on all four sides (slide 10)."""
-    if boundary == "outflow":
-        return fill_outflow_ghosts(U)
-    if boundary == "periodic":
-        return fill_periodic_ghosts(U)
-    raise ValueError(f"unknown boundary {boundary!r}: use 'outflow' or 'periodic'")
+def apply_bcs(U, boundary_x, boundary_y):
+    """Fill the NG = 2 ghost layers (slide 10): left and right with boundary_x, bottom and top
+    with boundary_y. The corner ghosts get the y filling; the scheme never reads them."""
+    if boundary_x == "outflow":
+        U = fill_outflow_ghosts_x(U)
+    else:
+        U = fill_periodic_ghosts_x(U)
+    if boundary_y == "outflow":
+        U = fill_outflow_ghosts_y(U)
+    else:
+        U = fill_periodic_ghosts_y(U)
+    return U
 
 
 def minmod(a, b):
@@ -209,7 +222,7 @@ def face_states(W, idir):
     return left_state, right_state
 
 
-# ---------- Stage 4: spatial right-hand side and time integration 
+# ---------- spatial right-hand side and time integration 
 
 def flux_divergence(F, axis, spacing):
     """(F_i+1/2 - F_i-1/2) / spacing, with F_i+1/2 stored at index i."""
@@ -231,21 +244,21 @@ def godunov_update(U, dx, dy, gamma, riemann_solver):
     return -(divergence_x + divergence_y)
 
 
-def euler_step(U, dt, dx, dy, gamma, riemann_solver, boundary):
+def euler_step(U, dt, dx, dy, gamma, riemann_solver, boundary_x, boundary_y):
     """U + dt L(U), with the ghost cells refilled for the next evaluation of L."""
     U_next = U + dt * godunov_update(U, dx, dy, gamma, riemann_solver)
-    return apply_bcs(U_next, boundary)
+    return apply_bcs(U_next, boundary_x, boundary_y)
 
 
-def advance(U, dt, dx, dy, gamma, riemann_solver, boundary):
+def advance(U, dt, dx, dy, gamma, riemann_solver, boundary_x, boundary_y):
     """SSP-RK2 (slide 18): U1 = U + dt L(U), then U_new = (U + (U1 + dt L(U1))) / 2."""
-    U_1 = euler_step(U, dt, dx, dy, gamma, riemann_solver, boundary)
-    U_2 = euler_step(U_1, dt, dx, dy, gamma, riemann_solver, boundary)
+    U_1 = euler_step(U, dt, dx, dy, gamma, riemann_solver, boundary_x, boundary_y)
+    U_2 = euler_step(U_1, dt, dx, dy, gamma, riemann_solver, boundary_x, boundary_y)
     U_new = 0.5 * U + 0.5 * U_2
-    return apply_bcs(U_new, boundary)
+    return apply_bcs(U_new, boundary_x, boundary_y)
 
 
-# ---------- Stage 5: the 2-D simulation, initial conditions and outputs
+# ---------- the 2-D simulation, initial conditions and outputs
 
 class Cloud:
     """A round cloud of gas (density, pressure, velocity u, v) in the ambient medium.
@@ -275,10 +288,11 @@ class Cloud:
 class Godunov2D:
     def __init__(self, nx, ny, xmin, xmax, ymin, ymax, gamma, clouds,
                  ambient_density=0.01, ambient_pressure=0.01,
-                 riemann_solver=hllc_flux, boundary="outflow"):
+                 riemann_solver=hllc_flux, boundary_x="outflow", boundary_y="outflow"):
         """clouds is a list of non-overlapping Cloud, in a uniform ambient medium at rest;
-        boundary is "outflow" or "periodic", on all four sides."""
-        self._check_inputs(nx, ny, xmin, xmax, ymin, ymax, gamma, boundary)
+        boundary_x (left and right sides) and boundary_y (bottom and top) are each
+        "outflow" or "periodic"."""
+        self._check_inputs(nx, ny, xmin, xmax, ymin, ymax, gamma, boundary_x, boundary_y)
         self.t = 0.0
         self.clouds = clouds
         self.ambient_density = ambient_density
@@ -288,21 +302,23 @@ class Godunov2D:
         self.extent = (xmin, xmax, ymin, ymax)
         self.gamma = gamma
         self.riemann_solver = riemann_solver
-        self.boundary = boundary
+        self.boundary_x = boundary_x
+        self.boundary_y = boundary_y
         self.nx = nx
         self.ny = ny
         X, Y = self.cell_centres()
         self.set_primitives(self.clouds_in_ambient_medium(X, Y))
 
-    def _check_inputs(self, nx, ny, xmin, xmax, ymin, ymax, gamma, boundary):
+    def _check_inputs(self, nx, ny, xmin, xmax, ymin, ymax, gamma, boundary_x, boundary_y):
         if nx < 3 or ny < 3:
             raise ValueError("nx and ny must be at least 3 physical cells")
         if xmax <= xmin or ymax <= ymin:
             raise ValueError("the domain bounds must be increasing: xmin < xmax, ymin < ymax")
         if gamma <= 1:
             raise ValueError("gamma must be larger than 1")
-        if boundary not in ("outflow", "periodic"):
-            raise ValueError(f"unknown boundary {boundary!r}: use 'outflow' or 'periodic'")
+        for boundary in (boundary_x, boundary_y):
+            if boundary not in ("outflow", "periodic"):
+                raise ValueError(f"unknown boundary {boundary!r}: use 'outflow' or 'periodic'")
 
     def cell_centres(self):
         """X and Y of every cell centre, ghost cells included."""
@@ -313,7 +329,7 @@ class Godunov2D:
 
     def set_primitives(self, W):
         """Replace the state by the primitives W = [rho, u, v, P] given on the whole grid."""
-        self.U = apply_bcs(prim_to_cons(W, self.gamma), self.boundary)
+        self.U = apply_bcs(prim_to_cons(W, self.gamma), self.boundary_x, self.boundary_y)
 
     def clouds_in_ambient_medium(self, X, Y):
         """Primitives [rho, u, v, P]: each cloud's state inside it, the ambient state elsewhere."""
@@ -343,7 +359,7 @@ class Godunov2D:
     def step(self, dt):
         """One SSP-RK2 step; keeps the state U and the time t together."""
         self.U = advance(self.U, dt, self.dx, self.dy, self.gamma,
-                         self.riemann_solver, self.boundary)
+                         self.riemann_solver, self.boundary_x, self.boundary_y)
         self.t += dt
 
     def run_until(self, t_end, CFL):
@@ -410,7 +426,7 @@ class Godunov2D:
     def plot_fields(self, case_name):
         """One figure: a row per field, a column per output time; saved as a png."""
         figure, axes = plt.subplots(len(FIELD_LABELS), len(self.output_times),
-                                    figsize=(15, 7), layout="constrained")
+                                    figsize=(20, 8), layout="constrained")
         row = 0
         for field_name, label in FIELD_LABELS.items():
             image = self.plot_field_row(axes[row], field_name)
@@ -418,7 +434,7 @@ class Godunov2D:
             row += 1
 
         figure.suptitle(f"Two-cloud collision: {case_name}")
-        file_name = "collision_" + case_name.replace(", ", "_") + ".png"
+        file_name = "collision_" + case_name.replace(", ", "_").replace(" ", "_") + ".png"
         figure.savefig(file_name, dpi=130)
         plt.close(figure)
         print(f"saved {file_name}")
@@ -443,7 +459,8 @@ AMBIENT_DENSITY = 0.01
 AMBIENT_PRESSURE = 0.01
 
 SOLVERS = {"HLL": hll_flux, "HLLC": hllc_flux}
-BOUNDARIES = ["outflow", "periodic"]
+# (boundary_x, boundary_y): left and right sides, then bottom and top.
+BOUNDARIES = [("outflow", "outflow"), ("periodic", "periodic")]
 
 # Density and pressure span two decades (clouds against a 0.01 medium), so they are shown in log10.
 FIELD_LABELS = {
@@ -459,37 +476,33 @@ def print_masses(simulations):
     header = ""
     for t in OUTPUT_TIMES:
         header += f"{f't = {t}':>10}"
-    print(f"{'':36}{header}")
+    print(f"{'':48}{header}")
     for case_name, sim in simulations.items():
         row = ""
         for mass in sim.masses:
             row += f"{mass:10.3f}"
-        print(f"{case_name:36}{row}")
+        print(f"{case_name:48}{row}")
+
+
+def run_case(solver_name, boundary_x, boundary_y):
+    """Run one simulation to every output time and save its figure."""
+    case_name = f"{CLOUD_SETUP}, {solver_name}, x {boundary_x}, y {boundary_y}"
+    print(f"running {case_name}")
+    sim = Godunov2D(NX, NY, X_MIN, X_MAX, Y_MIN, Y_MAX, GAMMA, CLOUDS,
+                    ambient_density=AMBIENT_DENSITY, ambient_pressure=AMBIENT_PRESSURE,
+                    riemann_solver=SOLVERS[solver_name],
+                    boundary_x=boundary_x, boundary_y=boundary_y)
+    sim.evolve(OUTPUT_TIMES, CFL)
+    sim.plot_fields(case_name)
+    return case_name, sim
 
 
 def main():
     simulations = {}
-
-    case_name = f"{CLOUD_SETUP}, HLL, outflow"
-    print(f"running {case_name}")
-    sim = Godunov2D(NX, NY, X_MIN, X_MAX, Y_MIN, Y_MAX, GAMMA, CLOUDS,
-                    ambient_density=AMBIENT_DENSITY, ambient_pressure=AMBIENT_PRESSURE,
-                    riemann_solver=hll_flux, boundary="outflow")
-    sim.evolve(OUTPUT_TIMES, CFL)
-    sim.plot_fields(case_name)
-    simulations[case_name] = sim
-
-    # for solver_name, riemann_solver in SOLVERS.items():
-    #     for boundary in BOUNDARIES:
-    #         case_name = f"{CLOUD_SETUP}, {solver_name}, {boundary}"
-    #         print(f"running {case_name}")
-    #         sim = Godunov2D(NX, NY, X_MIN, X_MAX, Y_MIN, Y_MAX, GAMMA, CLOUDS,
-    #                         ambient_density=AMBIENT_DENSITY, ambient_pressure=AMBIENT_PRESSURE,
-    #                         riemann_solver=riemann_solver, boundary=boundary)
-    #         sim.evolve(OUTPUT_TIMES, CFL)
-    #         sim.plot_fields(case_name)
-    #         simulations[case_name] = sim
-
+    for solver_name in SOLVERS:
+        for boundary_x, boundary_y in BOUNDARIES:
+            case_name, sim = run_case(solver_name, boundary_x, boundary_y)
+            simulations[case_name] = sim
     print_masses(simulations)
 
 
